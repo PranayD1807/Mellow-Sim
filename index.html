@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mellow Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="ui-layer">
+        <div id="start-screen"
+            style="position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 40; display: flex; align-items: center; justify-content: center; flex-direction: column; pointer-events: auto;">
+            <h1 style="font-size: 3rem; margin-bottom: 0.5rem; text-shadow: 0 0 20px rgba(255,255,255,0.1);">Mellow
+                Simulator</h1>
+            <p style="color: var(--text-muted); margin-bottom: 2rem;">A minimalist agent-based simulation</p>
+            <button id="btn-show-start-dialog" class="btn" style="font-size: 1.25rem; padding: 12px 24px;">Start
+                Game</button>
+        </div>
+        <header>
+            <h1>Mellow Simulator</h1>
+            <p>A minimalist agent-based simulation</p>
+            <span id="world-clock" class="world-clock">Year 0</span>
+        </header>
+
+        <div id="god-toolbar"
+            style="position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px; background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: row; gap: 8px; z-index: 10; pointer-events: auto;">
+            <button class="btn btn-icon btn-god active" style="font-size: 1.5rem; width: 48px; height: 48px;"
+                data-action="select" title="Select">👆</button>
+            <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
+                data-action="lightning" title="Smite">⚡</button>
+            <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
+                data-action="food" title="Drop Food">🍔</button>
+            <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
+                data-action="potion" title="Love Potion">💖</button>
+            <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
+                data-action="plague" title="Plague">🦠</button>
+        </div>
+
+        <div id="settings-modal" class="hidden">
+            <div id="settings-backdrop" class="modal-backdrop"></div>
+            <div id="settings-panel">
+                <div class="panel-header">
+                    <h2>World Settings</h2>
+                    <button id="btn-close-settings" class="btn-icon" title="Close">&times;</button>
+                </div>
+
+                <div id="settings-scroll-area"
+                    style="overflow-y: auto; max-height: 60vh; padding-right: 8px; display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                    <div class="stat-section-label" style="margin-top: 0;">Initial State</div>
+                    <div class="setting-row" id="row-init-red-males">
+                        <label style="color: #ef4444;">Red Males</label>
+                        <input type="number" id="cfg-init-red-males" value="15">
+                    </div>
+                    <div class="setting-row" id="row-init-red-females">
+                        <label style="color: #ef4444;">Red Females</label>
+                        <input type="number" id="cfg-init-red-females" value="15">
+                    </div>
+                    <div class="setting-row" id="row-init-blue-males">
+                        <label style="color: #3b82f6;">Blue Males</label>
+                        <input type="number" id="cfg-init-blue-males" value="15">
+                    </div>
+                    <div class="setting-row" id="row-init-blue-females">
+                        <label style="color: #3b82f6;">Blue Females</label>
+                        <input type="number" id="cfg-init-blue-females" value="15">
+                    </div>
+
+                    <div class="stat-section-label">Environment</div>
+                    <div class="setting-row">
+                        <label>Limit Population</label>
+                        <input type="checkbox" id="cfg-limit-pop" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Max Population</label>
+                        <input type="number" id="cfg-max-pop" value="300">
+                    </div>
+                    <div class="setting-row">
+                        <label>Max Food</label>
+                        <input type="number" id="cfg-max-food" value="250">
+                    </div>
+                    <div class="setting-row">
+                        <label>Food Nutrition</label>
+                        <input type="number" id="cfg-food-nut" value="1500" step="100">
+                    </div>
+                    <div class="setting-row">
+                        <label>Enable Tribes</label>
+                        <input type="checkbox" id="cfg-tribes" checked>
+                    </div>
+
+                    <div class="stat-section-label">Behaviors & Rules</div>
+                    <div class="setting-row">
+                        <label>Fighting Mechanism</label>
+                        <input type="checkbox" id="cfg-fighting" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Reproduction</label>
+                        <input type="checkbox" id="cfg-repro" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Enable Hunger</label>
+                        <input type="checkbox" id="cfg-hunger" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Agents Aging</label>
+                        <input type="checkbox" id="cfg-aging" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Max Lifespan</label>
+                        <input type="number" id="cfg-max-age" value="75">
+                    </div>
+                    <div class="setting-row">
+                        <label>Incest Penalty</label>
+                        <input type="checkbox" id="cfg-incest" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Pref Degradation</label>
+                        <input type="checkbox" id="cfg-pref" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Mutation Rate</label>
+                        <input type="number" step="0.05" id="cfg-mutation" value="0.15">
+                    </div>
+
+                    <div class="stat-section-label">Simulation Dynamics</div>
+                    <div class="setting-row">
+                        <label>Sim Speed (Ticks/Yr)</label>
+                        <input type="number" id="cfg-ticks-yr" value="60">
+                    </div>
+                    <div class="setting-row">
+                        <label>Base Move Speed</label>
+                        <input type="number" step="0.1" id="cfg-speed" value="0.5">
+                    </div>
+
+                    <div class="stat-section-label">Visuals & Ranges</div>
+                    <div class="setting-row">
+                        <label>Awareness Radius</label>
+                        <input type="number" id="cfg-awareness-radius" value="200">
+                    </div>
+                    <div class="setting-row">
+                        <label>Show Awareness</label>
+                        <input type="checkbox" id="cfg-show-awareness" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Interaction Radius</label>
+                        <input type="number" id="cfg-interaction-radius" value="25">
+                    </div>
+                    <div class="setting-row">
+                        <label>Show Interaction</label>
+                        <input type="checkbox" id="cfg-show-interaction">
+                    </div>
+                </div>
+
+                <div id="start-actions" style="margin-top: 16px; display: none; justify-content: center;">
+                    <button id="btn-launch-sim" class="btn" style="width: 100%;">Launch Simulation</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="stats-panel">
+            <div class="stat-section-label">Current Demographics</div>
+            <div class="stat-box">
+                <span class="stat-label">Population</span>
+                <span id="stat-population" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Males</span>
+                <span id="stat-males" class="stat-value" style="color: #60a5fa;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Females</span>
+                <span id="stat-females" class="stat-value" style="color: #f472b6;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Introverts</span>
+                <span id="stat-introverts" class="stat-value" style="color: #818cf8;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Extroverts</span>
+                <span id="stat-extroverts" class="stat-value" style="color: #34d399;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Incest Population</span>
+                <span id="stat-incest-current" class="stat-value" style="color: #ef4444;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Infected 🦠</span>
+                <span id="stat-infected" class="stat-value" style="color: #84cc16;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Available Food</span>
+                <span id="stat-food" class="stat-value" style="color: #a3e635;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Tribe Red</span>
+                <span id="stat-tribe-red" class="stat-value" style="color: #ef4444;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Tribe Blue</span>
+                <span id="stat-tribe-blue" class="stat-value" style="color: #3b82f6;">0</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">Historical Totals</div>
+            <div class="stat-box">
+                <span class="stat-label">Encounters</span>
+                <span id="stat-encounters" class="stat-value" style="color: #fbbf24;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Murders</span>
+                <span id="stat-kills" class="stat-value" style="color: #ef4444;">0</span>
+            </div>
+            <div class="stat-box" title="Successful Reproductions">
+                <span class="stat-label">Repros</span>
+                <span id="stat-repros" class="stat-value" style="color: #10b981;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Total Born</span>
+                <span id="stat-born" class="stat-value" style="color: #a78bfa;">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Total Incest Born</span>
+                <span id="stat-incest-total" class="stat-value" style="color: #f87171;">0</span>
+            </div>
+            <div class="stat-box" title="Deaths from old age">
+                <span class="stat-label">Old Age ☠</span>
+                <span id="stat-natural-deaths" class="stat-value" style="color: #94a3b8;">0</span>
+            </div>
+        </div>
+
+        <div id="entity-stats-panel" class="hidden">
+            <h2 id="ent-name">Entity Name</h2>
+
+            <div class="stat-section-label">Core Stats</div>
+            <div class="stat-box">
+                <span class="stat-label">Gender</span>
+                <span id="ent-gender" class="stat-value">Male</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Age</span>
+                <span id="ent-age" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Strength</span>
+                <span id="ent-strength" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Intelligence</span>
+                <span id="ent-intelligence" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Offspring</span>
+                <span id="ent-offspring" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label" style="color:#fbbf24;">Incest Born</span>
+                <span id="ent-incest" class="stat-value">No</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">Personality & Drives</div>
+            <div class="stat-box">
+                <span class="stat-label">Personality</span>
+                <span id="ent-personality" class="stat-value">—</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Libido</span>
+                <span id="ent-libido" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Fighter</span>
+                <span id="ent-fighter" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Charm</span>
+                <span id="ent-charm" class="stat-value">0</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">Partner Preferences</div>
+            <div class="stat-box">
+                <span class="stat-label">Wants STR ≥</span>
+                <span id="ent-pref-str" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Wants INT ≥</span>
+                <span id="ent-pref-int" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Wants Type</span>
+                <span id="ent-pref-pers" class="stat-value">Any</span>
+            </div>
+        </div>
+
+        <div id="controls">
+            <button id="btn-open-settings" class="btn btn-icon" title="Settings">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                    </path>
+                </svg>
+            </button>
+            <button id="btn-pause" class="btn">Pause</button>
+            <button id="btn-reset" class="btn">Reset Simulation</button>
+        </div>
+    </div>
+
+    <canvas id="sim-canvas"></canvas>
+
+    <div id="game-over-modal" class="hidden">
+        <div class="modal-backdrop"></div>
+        <div id="game-over-panel">
+            <h2 id="go-title">Simulation Ended</h2>
+            <p id="go-reason" style="color: var(--text-muted); text-align: center; margin-bottom: 12px;"></p>
+            <hr />
+
+            <div class="stat-section-label">Global Statistics</div>
+            <div class="stat-box">
+                <span class="stat-label">Years Elapsed</span>
+                <span id="go-years" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Final Population</span>
+                <span id="go-pop" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Encounters</span>
+                <span id="go-encounters" class="stat-value">0</span>
+            </div>
+            <div class="stat-box" style="color:#ef4444;">
+                <span class="stat-label">Murders</span>
+                <span id="go-kills" class="stat-value">0</span>
+            </div>
+            <div class="stat-box" style="color:#10b981;">
+                <span class="stat-label">Reproductions</span>
+                <span id="go-repros" class="stat-value">0</span>
+            </div>
+            <div class="stat-box" style="color:#a78bfa;">
+                <span class="stat-label">Offspring Born</span>
+                <span id="go-born" class="stat-value">0</span>
+            </div>
+            <div class="stat-box" style="color:#94a3b8;">
+                <span class="stat-label">Natural Deaths</span>
+                <span id="go-natural" class="stat-value">0</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">Population Analytics</div>
+            <div class="stat-box">
+                <span class="stat-label">Avg Strength</span>
+                <span id="go-avg-str" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">Avg Intelligence</span>
+                <span id="go-avg-int" class="stat-value">0</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">Notable Entities</div>
+            <div style="font-size: 0.85rem; color: var(--text-main); margin-bottom:4px;">
+                <span style="color: var(--text-muted);">Most Prolific:</span> <span id="go-prolific">None</span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-main);">
+                <span style="color: var(--text-muted);">Strongest:</span> <span id="go-strongest">None</span>
+            </div>
+
+            <div style="margin-top: 16px; display: flex; justify-content: center;">
+                <button id="btn-go-restart" class="btn" style="width: 100%;">Restart Simulation</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="src/main.js?v=123456"></script>
+</body>
+
+</html>
