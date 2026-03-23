@@ -21,7 +21,7 @@ export const CONFIG = {
     ENABLE_MONSTERS: true,
     INITIAL_MONSTERS: 2,
     MONSTER_RADIUS: 25,
-    MONSTER_SPEED: 0.32,
+    MONSTER_SPEED: 0.45,
     MONSTER_AWARENESS: 600,
     MONSTER_SPAWN_INTERVAL: 1800, // E.g., spawn a new monster every 30 years (1800 ticks at 60tpy)
 

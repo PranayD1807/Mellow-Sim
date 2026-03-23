@@ -31,10 +31,16 @@ export class InteractionManager {
         const nx = dx / dist;
         const ny = dy / dist;
 
-        a.vx = nx * force;
-        a.vy = ny * force;
-        b.vx = -nx * force;
-        b.vy = -ny * force;
+        // Displace position directly since velocity clamping ruins this effect
+        a.x += nx * (force * 3);
+        a.y += ny * (force * 3);
+        b.x -= nx * (force * 3);
+        b.y -= ny * (force * 3);
+
+        a.vx = nx * force * 0.1;
+        a.vy = ny * force * 0.1;
+        b.vx = -nx * force * 0.1;
+        b.vy = -ny * force * 0.1;
     }
 
     spawnDeathParticles(x, y, particlesArray) {
@@ -576,7 +582,8 @@ export class InteractionManager {
                         this.spawnBirthParticles(newMonster.x, newMonster.y, particlesArray);
 
                         // Push them apart dramatically so she isn't immediately eaten next frame
-                        this.pushApart(agent, monster, 1.2);
+                        this.pushApart(agent, monster, 12.0);
+                        this.pushApart(newMonster, monster, 15.0);
 
                         continue; // Skip the devour logic!
                     }

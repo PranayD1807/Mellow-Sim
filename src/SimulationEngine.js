@@ -566,6 +566,9 @@ export class SimulationEngine {
         document.getElementById('go-kills').innerText = data.stats.kills;
         document.getElementById('go-repros').innerText = data.stats.repros;
         document.getElementById('go-born').innerText = data.stats.born;
+        if (document.getElementById('go-incest')) {
+            document.getElementById('go-incest').innerText = data.stats.incest_born;
+        }
         document.getElementById('go-natural').innerText = data.stats.natural_deaths;
 
         document.getElementById('go-avg-str').innerText = data.analytics.avgStr;
