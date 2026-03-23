@@ -146,118 +146,167 @@ export class Agent extends Entity {
     /**
      * Steering: apply forces toward or away from nearby agents and food.
      */
-    steer(nearbyAgents, nearbyFood = []) {
+    steer(nearbyAgents, nearbyFood = [], nearbyMonsters = []) {
         let steerX = 0;
         let steerY = 0;
 
         // ------------------------------------
-        // Home Post / Tribe Capital Mechanic
+        // FEAR: Evade Monsters (Highest Priority)
         // ------------------------------------
-        if (this.mapWidth && this.mapHeight) {
-            if (this.seeksScarceGender || this.isScarceGender) {
-                // End of the world: Everyone heads to the Tree of Life (Center of map) to find each other!
-                const targetX = this.mapWidth / 2;
-                const targetY = this.mapHeight / 2;
-                const dx = targetX - this.x;
-                const dy = targetY - this.y;
-                const dist = Math.hypot(dx, dy);
-                if (dist > 20) {
-                   steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
-                   steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
-                }
-            } else if (this.isDesperate) {
-                // Tribe is dying out: Head to Tribe Capital (Red = Left, Blue = Right) to regroup
-                const isRed = this.tribe === 'Red';
-                const targetX = isRed ? this.mapWidth * 0.2 : this.mapWidth * 0.8;
-                const targetY = this.mapHeight / 2;
-                const dx = targetX - this.x;
-                const dy = targetY - this.y;
-                const dist = Math.hypot(dx, dy);
-                if (dist > 20) {
-                   steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
-                   steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
-                }
+        let closestMonster = null;
+        let minMonsterDist = Infinity;
+        for (const m of nearbyMonsters) {
+            const mDist = Math.hypot(this.x - m.x, this.y - m.y);
+            if (mDist < minMonsterDist && mDist < this.dynamicAwarenessRadius * 1.5) {
+                 minMonsterDist = mDist;
+                 closestMonster = m;
             }
         }
-
-        if (CONFIG.ENABLE_HUNGER && this.hunger < CONFIG.MAX_HUNGER * 0.7 && nearbyFood.length > 0) {
-            let closestFood = null;
-            let minDist = Infinity;
-            for (const f of nearbyFood) {
-                const d = Math.hypot(f.x - this.x, f.y - this.y);
-                if (d < minDist) { minDist = d; closestFood = f; }
-            }
-            if (closestFood) {
-                const dx = closestFood.x - this.x;
-                const dy = closestFood.y - this.y;
-                const dist = Math.hypot(dx, dy);
-                if (dist > 0) {
-                    steerX += (dx / dist) * CONFIG.FOOD_ATTRACTION;
-                    steerY += (dy / dist) * CONFIG.FOOD_ATTRACTION;
+        
+        let isPanicked = false;
+        let isHuntingMonster = false;
+        if (closestMonster) {
+            // Hero check: Very strong, aggressive agents will actively charge the monster!
+            if (this.strength > 75 && this.fighter > 60) {
+                isHuntingMonster = true;
+                const dx = closestMonster.x - this.x;
+                const dy = closestMonster.y - this.y;
+                if (minMonsterDist > 0) {
+                    steerX += (dx / minMonsterDist) * 2.5 * CONFIG.STEER_STRENGTH;
+                    steerY += (dy / minMonsterDist) * 2.5 * CONFIG.STEER_STRENGTH;
                 }
-            }
-        }
-
-        for (const other of nearbyAgents) {
-            if (other.id === this.id || other.markedForDeath) continue;
-
-            const dx = other.x - this.x;
-            const dy = other.y - this.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < 1 || dist > this.dynamicAwarenessRadius) continue;
-
-            const nx = dx / dist;
-            const ny = dy / dist;
-
-            const isSameGender = this.gender === other.gender;
-            const isSameTribe = !CONFIG.ENABLE_TRIBES || this.tribe === other.tribe;
-            const isDesperateRepro = !isSameGender && ((this.seeksScarceGender && other.isScarceGender) || (other.seeksScarceGender && this.isScarceGender));
-
-            if (isDesperateRepro) {
-                // Overriding all logic: charge toward potential mate to save the civilization!
-                steerX += nx * 1.5 * CONFIG.STEER_STRENGTH;
-                steerY += ny * 1.5 * CONFIG.STEER_STRENGTH;
-            } else if (other.isInfected) {
-                // Plague "Social Distancing": Smart agents actively run away from green sick agents
-                const fleeUrge = Math.max(0, (this.intelligence - 50) / 50); // scales from 0 (at 50 int) to 1.0 (at 100 int)
-                if (fleeUrge > 0) {
-                    steerX -= nx * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
-                    steerY -= ny * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
-                }
-            } else if (!isSameTribe) {
-                // Inter-tribe encounters: Aggressive agents charge, cowardly agents flee
-                let fightUrge = (this.fighter - 40) / 40; // High fighter (>40) will charge aggressively, Low fighter will scatter
-                
-                // Survival Instinct: If outmatched and intelligent, override anger and flee instead!
-                if (this.intelligence > 60 && this.strength < other.strength + 15) {
-                    fightUrge = -1.0; 
-                }
-
-                steerX += nx * fightUrge * CONFIG.STEER_STRENGTH;
-                steerY += ny * fightUrge * CONFIG.STEER_STRENGTH;
-            } else if (isSameGender) {
-                // Same tribe, same gender: slightly spread out to avoid blobbing up,
-                // BUT if the tribe is desperate or the agent is weak, clump together for protection!
-                let cohesion = -0.3; // Spread out normally
-                if (this.isDesperate || this.strength < 40) cohesion = 0.5; // flock together!
-                steerX += nx * cohesion * CONFIG.STEER_STRENGTH;
-                steerY += ny * cohesion * CONFIG.STEER_STRENGTH;
             } else {
-                // Same tribe, opposite gender: seek mate based on libido
-                let mateUrge = (this.libido - 30) / 100;
-                if (CONFIG.ENABLE_INCEST_PENALTY && this.isRelated(other)) {
-                    // Flee from siblings normally, but interbreed if the tribe is desperate!
-                    // Smart agents actively avoid incest much harder to protect genetics.
-                    const incestRepulsion = -2.0 - (this.intelligence / 25);
-                    mateUrge = this.isDesperate ? Math.max(0, mateUrge) : incestRepulsion;
+                isPanicked = true;
+                // Panic run! Flee directly away from the monster.
+                const dx = this.x - closestMonster.x;
+                const dy = this.y - closestMonster.y;
+                
+                // Normalize and apply strong escape force
+                if (minMonsterDist > 0) {
+                    steerX += (dx / minMonsterDist) * 3.5 * CONFIG.STEER_STRENGTH;
+                    steerY += (dy / minMonsterDist) * 3.5 * CONFIG.STEER_STRENGTH;
                 }
-                steerX += nx * mateUrge * CONFIG.STEER_STRENGTH;
-                steerY += ny * mateUrge * CONFIG.STEER_STRENGTH;
+            }
+        }
+
+        // ------------------------------------
+        // Foraging, Socializing, & Reproduction (Suppressed if Panicked/Hunting)
+        // ------------------------------------
+        if (!isPanicked && !isHuntingMonster) {
+            let cx = 0, cy = 0;
+            let cvx = 0, cvy = 0;
+            let separationX = 0, separationY = 0;
+            let count = 0;
+
+            // ------------------------------------
+            // Home Post / Tribe Capital Mechanic
+            // ------------------------------------
+            if (this.mapWidth && this.mapHeight) {
+                if (this.seeksScarceGender || this.isScarceGender) {
+                    // End of the world: Everyone heads to the Tree of Life (Center of map) to find each other!
+                    const targetX = this.mapWidth / 2;
+                    const targetY = this.mapHeight / 2;
+                    const dx = targetX - this.x;
+                    const dy = targetY - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 20) {
+                       steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                       steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                    }
+                } else if (this.isDesperate) {
+                    // Tribe is dying out: Head to Tribe Capital (Red = Left, Blue = Right) to regroup
+                    const isRed = this.tribe === 'Red';
+                    const targetX = isRed ? this.mapWidth * 0.2 : this.mapWidth * 0.8;
+                    const targetY = this.mapHeight / 2;
+                    const dx = targetX - this.x;
+                    const dy = targetY - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 20) {
+                       steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                       steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                    }
+                }
             }
 
-            const socialForce = this.personality === PERSONALITY.INTROVERT ? -0.15 : 0.1;
-            steerX += nx * socialForce * CONFIG.STEER_STRENGTH;
-            steerY += ny * socialForce * CONFIG.STEER_STRENGTH;
+            if (CONFIG.ENABLE_HUNGER && this.hunger < CONFIG.MAX_HUNGER * 0.7 && nearbyFood.length > 0) {
+                let closestFood = null;
+                let minDist = Infinity;
+                for (const f of nearbyFood) {
+                    const d = Math.hypot(f.x - this.x, f.y - this.y);
+                    if (d < minDist) { minDist = d; closestFood = f; }
+                }
+                if (closestFood) {
+                    const dx = closestFood.x - this.x;
+                    const dy = closestFood.y - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist > 0) {
+                        steerX += (dx / dist) * CONFIG.FOOD_ATTRACTION;
+                        steerY += (dy / dist) * CONFIG.FOOD_ATTRACTION;
+                    }
+                }
+            }
+
+            for (const other of nearbyAgents) {
+                if (other.id === this.id || other.markedForDeath) continue;
+
+                const dx = other.x - this.x;
+                const dy = other.y - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist < 1 || dist > this.dynamicAwarenessRadius) continue;
+
+                const nx = dx / dist;
+                const ny = dy / dist;
+
+                const isSameGender = this.gender === other.gender;
+                const isSameTribe = !CONFIG.ENABLE_TRIBES || this.tribe === other.tribe;
+                const isDesperateRepro = !isSameGender && ((this.seeksScarceGender && other.isScarceGender) || (other.seeksScarceGender && this.isScarceGender));
+
+                if (isDesperateRepro) {
+                    // Overriding all logic: charge toward potential mate to save the civilization!
+                    steerX += nx * 1.5 * CONFIG.STEER_STRENGTH;
+                    steerY += ny * 1.5 * CONFIG.STEER_STRENGTH;
+                } else if (other.isInfected) {
+                    // Plague "Social Distancing": Smart agents actively run away from green sick agents
+                    const fleeUrge = Math.max(0, (this.intelligence - 50) / 50); // scales from 0 (at 50 int) to 1.0 (at 100 int)
+                    if (fleeUrge > 0) {
+                        steerX -= nx * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
+                        steerY -= ny * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
+                    }
+                } else if (!isSameTribe) {
+                    // Inter-tribe encounters: Aggressive agents charge, cowardly agents flee
+                    let fightUrge = (this.fighter - 40) / 40; // High fighter (>40) will charge aggressively, Low fighter will scatter
+                    
+                    // Survival Instinct: If outmatched and intelligent, override anger and flee instead!
+                    if (this.intelligence > 60 && this.strength < other.strength + 15) {
+                        fightUrge = -1.0; 
+                    }
+
+                    steerX += nx * fightUrge * CONFIG.STEER_STRENGTH;
+                    steerY += ny * fightUrge * CONFIG.STEER_STRENGTH;
+                } else if (isSameGender) {
+                    // Same tribe, same gender: slightly spread out to avoid blobbing up,
+                    // BUT if the tribe is desperate or the agent is weak, clump together for protection!
+                    let cohesion = -0.3; // Spread out normally
+                    if (this.isDesperate || this.strength < 40) cohesion = 0.5; // flock together!
+                    steerX += nx * cohesion * CONFIG.STEER_STRENGTH;
+                    steerY += ny * cohesion * CONFIG.STEER_STRENGTH;
+                } else {
+                    // Same tribe, opposite gender: seek mate based on libido
+                    let mateUrge = (this.libido - 30) / 100;
+                    if (CONFIG.ENABLE_INCEST_PENALTY && this.isRelated(other)) {
+                        // Flee from siblings normally, but interbreed if the tribe is desperate!
+                        // Smart agents actively avoid incest much harder to protect genetics.
+                        const incestRepulsion = -2.0 - (this.intelligence / 25);
+                        mateUrge = this.isDesperate ? Math.max(0, mateUrge) : incestRepulsion;
+                    }
+                    steerX += nx * mateUrge * CONFIG.STEER_STRENGTH;
+                    steerY += ny * mateUrge * CONFIG.STEER_STRENGTH;
+                }
+
+                const socialForce = this.personality === PERSONALITY.INTROVERT ? -0.15 : 0.1;
+                steerX += nx * socialForce * CONFIG.STEER_STRENGTH;
+                steerY += ny * socialForce * CONFIG.STEER_STRENGTH;
+            }
         }
 
         this.vx += steerX;

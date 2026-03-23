@@ -2,6 +2,7 @@ import { Agent } from './Agent.js?v=123456';
 import { Particle } from './Particle.js?v=123456';
 import { CONFIG, PERSONALITY } from './config.js?v=123456';
 import { rand, randInt, distance, clamp } from './utils.js?v=123456';
+import { Monster } from './Monster.js?v=123456';
 
 export class InteractionManager {
     constructor() {
@@ -11,8 +12,12 @@ export class InteractionManager {
             reproduction_successes: 0,
             offspring_born: 0,
             incest_born: 0,
-            natural_deaths: 0
+            natural_deaths: 0,
+            monster_births: 0,
+            monster_fights: 0,
+            monster_deaths: 0
         };
+        this.events = [];
     }
 
     /**
@@ -123,6 +128,13 @@ export class InteractionManager {
         this.spawnDeathParticles(loser.x, loser.y, particlesArray);
         winner.vx *= -1;
         winner.vy *= -1;
+
+        if (isInterTribe || winner.strength > 90) {
+            this.events.push({
+                type: 'combat',
+                msg: `⚔️ ${winner.name} brutally struck down ${loser.name} in combat!`
+            });
+        }
     }
 
     /**
@@ -261,7 +273,12 @@ export class InteractionManager {
                 prefPersonality: Math.random() < 0.3 ? null : (Math.random() > 0.5 ? PERSONALITY.EXTROVERT : PERSONALITY.INTROVERT),
             };
 
-            const childTribe = Math.random() < 0.5 ? parentA.tribe : parentB.tribe;
+            let childTribe;
+            if (parentA.tribe === parentB.tribe) {
+                childTribe = parentA.tribe;
+            } else {
+                childTribe = Math.random() < 0.5 ? parentA.tribe : parentB.tribe;
+            }
             // Child is born at age 0 at current worldTick
             let child = new Agent(
                 parentA.x + rand(-10, 10),
@@ -278,6 +295,24 @@ export class InteractionManager {
             );
             agentsArray.push(child);
             this.spawnBirthParticles(child.x, child.y, particlesArray);
+
+            if (isCrossTribe && numChildren > 0 && Math.random() < 0.2) {
+                // Not every cross-tribe child needs an announcement, but give it a good chance
+                this.events.push({
+                    type: 'romance',
+                    msg: `❤️ Love blooms! ${parentA.name} and ${parentB.name} crossed enemy lines to have a child.`
+                });
+            } else if (isDesperateOverride && numChildren > 0 && Math.random() < 0.1) {
+                this.events.push({
+                    type: 'divine',
+                    msg: `✨ Desperate times! ${parentA.name} and ${parentB.name} reproduced to save their tribe.`
+                });
+            } else if (isIncest && numChildren > 0 && Math.random() < 0.05) {
+                this.events.push({
+                    type: 'divine',
+                    msg: `⚠️ Questionable! ${parentA.name} and ${parentB.name} engaged in incestuous activities.`
+                });
+            }
         }
     }
 
@@ -298,9 +333,96 @@ export class InteractionManager {
         }
     }
 
-    process(agentsArray, particlesArray, foodsArray, worldTick) {
+    processMonsterVsMonster(monstersArray, particlesArray) {
+        if (!CONFIG.ENABLE_FIGHTING) return;
+
+        // Process monster starvation
+        if (CONFIG.ENABLE_HUNGER) {
+            for (let i = 0; i < monstersArray.length; i++) {
+                const m = monstersArray[i];
+                if (m.markedForDeath) continue;
+
+                m.hunger -= CONFIG.STARVATION_RATE;
+                if (m.hunger <= 0) {
+                    m.markedForDeath = true;
+                    this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 1;
+                    this.spawnDeathParticles(m.x, m.y, particlesArray);
+                    for (let k = 0; k < 20; k++) particlesArray.push(new Particle(m.x, m.y, '#FF7400'));
+
+                    this.events.push({
+                        type: 'plague',
+                        msg: `💀 A Monster has succumbed to starvation!`
+                    });
+                }
+            }
+        }
+
+        // Process monster vs monster territory fights
+        for (let i = 0; i < monstersArray.length; i++) {
+            const m1 = monstersArray[i];
+            if (m1.markedForDeath) continue;
+
+            for (let j = i + 1; j < monstersArray.length; j++) {
+                const m2 = monstersArray[j];
+                if (m2.markedForDeath) continue;
+
+                const dist = distance(m1, m2);
+                if (dist < m1.radius + m2.radius) {
+                    // Territorial fight! Both deal damage to each other.
+                    const m1Dmg = m1.strength * 0.4;
+                    const m2Dmg = m2.strength * 0.4;
+
+                    m1.hp -= m2Dmg;
+                    m2.hp -= m1Dmg;
+
+                    // Knockback to prevent constant clashing
+                    this.pushApart(m1, m2, 12.0);
+
+                    this.stats.monster_fights = (this.stats.monster_fights || 0) + 1;
+
+                    let message = null;
+                    if (m1.hp <= 0 && m2.hp <= 0) {
+                        m1.markedForDeath = true;
+                        m2.markedForDeath = true;
+                        this.spawnDeathParticles(m1.x, m1.y, particlesArray);
+                        this.spawnDeathParticles(m2.x, m2.y, particlesArray);
+                        for (let k = 0; k < 20; k++) { particlesArray.push(new Particle(m1.x, m1.y, '#FF7400')); particlesArray.push(new Particle(m2.x, m2.y, '#FF7400')); }
+
+                        message = `🌋 TITAN CLASH! Two monsters destroyed each other in a fierce territorial dispute!`;
+                        this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 2;
+                    } else if (m1.hp <= 0) {
+                        m1.markedForDeath = true;
+                        this.spawnDeathParticles(m1.x, m1.y, particlesArray);
+                        for (let k = 0; k < 20; k++) particlesArray.push(new Particle(m1.x, m1.y, '#FF7400'));
+
+                        message = `🩸 BRUTAL DOMINANCE! A Monster killed a rival in a territorial fight!`;
+                        this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 1;
+                    } else if (m2.hp <= 0) {
+                        m2.markedForDeath = true;
+                        this.spawnDeathParticles(m2.x, m2.y, particlesArray);
+                        for (let k = 0; k < 20; k++) particlesArray.push(new Particle(m2.x, m2.y, '#FF7400'));
+
+                        message = `🩸 BRUTAL DOMINANCE! A Monster killed a rival in a territorial fight!`;
+                        this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 1;
+                    } else if (Math.random() < 0.1) {
+                        message = `⚠️ TERRITORIAL DISPUTE: Two monsters clashed violently over hunting grounds!`;
+                    }
+
+                    if (message) {
+                        this.events.push({
+                            type: 'combat',
+                            msg: message
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    process(agentsArray, particlesArray, foodsArray, worldTick, monstersArray = []) {
         // Age check first
         this.processAging(agentsArray, particlesArray, worldTick);
+        this.events = [];
 
         // Build Spatial Hash Grid to transform O(N^2) bottleneck into O(N)
         // Max awareness is now 1.5x for highly intelligent agents
@@ -352,7 +474,17 @@ export class InteractionManager {
                 }
             }
 
-            a.steer(nearbyAwareness, foodsArray);
+            const nearbyMonsters = [];
+            if (CONFIG.ENABLE_MONSTERS) {
+                for (const m of monstersArray) {
+                    if (m.markedForDeath) continue;
+                    if (distance(a, m) < a.dynamicAwarenessRadius * 1.5) {
+                        nearbyMonsters.push(m);
+                    }
+                }
+            }
+
+            a.steer(nearbyAwareness, foodsArray, nearbyMonsters);
 
             // Food consumption
             if (CONFIG.ENABLE_HUNGER) {
@@ -368,9 +500,15 @@ export class InteractionManager {
 
             for (const b of nearbyInteraction) {
                 // Plague spread guarantees infection on any interaction
-                if (a.isInfected || b.isInfected) {
+                if ((a.isInfected || b.isInfected) && !(a.isInfected && b.isInfected)) {
                     a.isInfected = true;
                     b.isInfected = true;
+                    if (Math.random() < 0.05) { // 5% chance to log an infection event so it doesn't spam
+                        this.events.push({
+                            type: 'plague',
+                            msg: `🦠 The Plague spreads between ${a.name} and ${b.name}.`
+                        });
+                    }
                 }
 
                 const isSameTribe = !CONFIG.ENABLE_TRIBES || a.tribe === b.tribe;
@@ -401,6 +539,120 @@ export class InteractionManager {
         }
     }
 
+    processMonsterInteractions(agentsArray, monstersArray, particlesArray, worldTick) {
+        if (!CONFIG.ENABLE_MONSTERS) return;
+
+        for (const monster of monstersArray) {
+            if (monster.markedForDeath) continue;
+
+            for (const agent of agentsArray) {
+                if (agent.markedForDeath) continue;
+
+                const dist = distance(agent, monster);
+                if (dist < agent.radius + monster.radius) {
+
+                    // Rare Mating Check
+                    const isAdultFemale = agent.gender === 'Female' && agent.canReproduce(worldTick);
+                    if (isAdultFemale && Math.random() < 0.15) { // 15% chance when encountering an adult female
+                        this.events.push({
+                            type: 'romance',
+                            msg: `🖤 UNTHINKABLE! A Monster spared ${agent.name} and took her as a mate!`
+                        });
+
+                        agent.cooldown = CONFIG.REPRODUCTION_COOLDOWN * 3; // Huge cooldown
+                        this.stats.monster_births = (this.stats.monster_births || 0) + 1;
+                        agent.offspringCount++;
+
+                        const childStr = Math.min(100, Math.floor((agent.strength + monster.strength) / 2 * 1.8)); // extreme strength
+                        const childInt = Math.min(100, Math.floor((agent.intelligence + monster.intelligence) / 2 * 1.3));
+
+                        let newMonster = new Monster(
+                            agent.x + rand(-15, 15),
+                            agent.y + rand(-15, 15),
+                            childStr,
+                            childInt
+                        );
+                        monstersArray.push(newMonster);
+                        this.spawnBirthParticles(newMonster.x, newMonster.y, particlesArray);
+
+                        // Push them apart dramatically so she isn't immediately eaten next frame
+                        this.pushApart(agent, monster, 1.2);
+
+                        continue; // Skip the devour logic!
+                    }
+
+                    // Encounter! Agent attempts to fight back
+                    // Intelligent agents get a bonus to damage output!
+                    let damage = agent.strength * (agent.fighter / 100);
+                    damage += damage * (agent.intelligence / 100);
+                    monster.hp -= damage;
+
+                    // Survival Check Check! Stronger and Smarter agents have a higher chance of surviving a blow (up to 80% natural + 20% smarts)
+                    const survivalChance = (agent.strength / 100) * 0.6 + (agent.intelligence / 100) * 0.3;
+
+                    if (Math.random() < survivalChance) {
+                        // Agent survives the clash!
+                        this.pushApart(agent, monster, 5.0); // Massive knockback
+
+                        // Small chance to broadcast non-lethal heroic strike
+                        if (Math.random() < 0.1) {
+                            this.events.push({
+                                type: 'combat',
+                                msg: `⚔️ AMAZING! ${agent.name} struck a Monster and survived the clash!`
+                            });
+                        }
+
+                        if (monster.hp <= 0) {
+                            monster.markedForDeath = true;
+                            this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 1;
+                            this.stats.monster_fights = (this.stats.monster_fights || 0) + 1;
+
+                            this.spawnDeathParticles(monster.x, monster.y, particlesArray);
+                            for (let i = 0; i < 20; i++) particlesArray.push(new Particle(monster.x, monster.y, '#FF7400'));
+
+                            this.events.push({
+                                type: 'combat',
+                                msg: `🗡️ LEGENDARY VICTORY! ${agent.name} heroically slayed a Monster and lived to tell the tale!`
+                            });
+                        }
+                    } else {
+                        // Agent is devoured
+                        agent.markedForDeath = true;
+                        this.stats.kills++;
+                        this.spawnDeathParticles(agent.x, agent.y, particlesArray);
+
+                        if (monster.hp <= 0) {
+                            // Mutual destruction
+                            monster.markedForDeath = true;
+                            this.stats.monster_deaths = (this.stats.monster_deaths || 0) + 1;
+                            this.stats.monster_fights = (this.stats.monster_fights || 0) + 1;
+
+                            this.spawnDeathParticles(monster.x, monster.y, particlesArray);
+                            for (let i = 0; i < 20; i++) particlesArray.push(new Particle(monster.x, monster.y, '#FF7400')); // Amber monster blood
+
+                            this.events.push({
+                                type: 'combat',
+                                msg: `🗡️ NOBLE SACRIFICE! ${agent.name} heroically slayed a Monster before dying!`
+                            });
+                        } else {
+                            // Regular devour
+                            this.events.push({
+                                type: 'plague', // reuse red style or new type
+                                msg: `👹 A Monster brutally devoured ${agent.name}!`
+                            });
+
+                            // Monster gains massive Hunger restoration, but NO HP!
+                            // Combat damage from heroes is permanent!
+                            if (CONFIG.ENABLE_HUNGER) {
+                                monster.hunger = Math.min(CONFIG.MAX_HUNGER, monster.hunger + CONFIG.FOOD_NUTRITION * 5); // Huge nutritional value from humans
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     reset() {
         this.stats = {
             encounters: 0,
@@ -408,7 +660,11 @@ export class InteractionManager {
             reproduction_successes: 0,
             offspring_born: 0,
             incest_born: 0,
-            natural_deaths: 0
+            natural_deaths: 0,
+            monster_births: 0,
+            monster_fights: 0,
+            monster_deaths: 0
         };
+        this.events = [];
     }
 }

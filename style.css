@@ -96,6 +96,8 @@ header p {
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
   pointer-events: auto;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 #entity-stats-panel {
@@ -379,4 +381,74 @@ header p {
   width: 16px;
   height: 16px;
   cursor: pointer;
+}
+
+/* Event Logs */
+.event-logs-container {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 30;
+  max-height: 60vh;
+  overflow: hidden;
+}
+
+.event-log-entry {
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-left: 4px solid #facc15; /* Yellow highlight by default */
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: auto;
+  opacity: 1;
+  width: 100%;
+  text-align: center;
+}
+
+.event-log-entry.plague { border-left-color: #84cc16; }
+.event-log-entry.romance { border-left-color: #f472b6; }
+.event-log-entry.combat { border-left-color: #ef4444; }
+.event-log-entry.divine { border-left-color: #60a5fa; }
+
+.event-log-entry.fade-out {
+  animation: fade-out 1s ease forwards;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateY(-20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    margin-bottom: 0;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+    margin-bottom: -100px; /* Collapse space */
+  }
 }

@@ -105,6 +105,7 @@ export class SimulationEngine {
         document.getElementById('btn-go-restart').addEventListener('click', () => {
             this.reset();
             this.isPaused = false;
+            this.worker.postMessage({ type: 'PAUSE', isPaused: false });
         });
 
         // Start screen logic
@@ -123,7 +124,7 @@ export class SimulationEngine {
                 INTERACTION_RADIUS: parseInt(document.getElementById('cfg-interaction-radius').value) || 25,
                 ENABLE_SHOW_AWARENESS: document.getElementById('cfg-show-awareness').checked,
                 ENABLE_SHOW_INTERACTION: document.getElementById('cfg-show-interaction').checked,
-                
+
                 MAX_FOOD: parseInt(document.getElementById('cfg-max-food').value) || 250,
                 FOOD_NUTRITION: parseInt(document.getElementById('cfg-food-nut').value) || 1500,
                 ENABLE_TRIBES: document.getElementById('cfg-tribes').checked,
@@ -131,7 +132,7 @@ export class SimulationEngine {
                 MAX_AGE: parseInt(document.getElementById('cfg-max-age').value) || 75,
                 TICKS_PER_YEAR: parseInt(document.getElementById('cfg-ticks-yr').value) || 60,
                 MAX_SPEED: parseFloat(document.getElementById('cfg-speed').value) || 0.5,
-                
+
                 ENABLE_FIGHTING: document.getElementById('cfg-fighting').checked,
                 ENABLE_REPRODUCTION: document.getElementById('cfg-repro').checked,
                 ENABLE_AGING: document.getElementById('cfg-aging').checked,
@@ -139,7 +140,9 @@ export class SimulationEngine {
                 ENABLE_PREF_DEGRADE: document.getElementById('cfg-pref').checked,
                 ENABLE_MAX_POPULATION: document.getElementById('cfg-limit-pop').checked,
                 MAX_POPULATION: parseInt(document.getElementById('cfg-max-pop').value) || 300,
-                MUTATION_RATE: parseFloat(document.getElementById('cfg-mutation').value) || 0.15
+                MUTATION_RATE: parseFloat(document.getElementById('cfg-mutation').value) || 0.15,
+                ENABLE_MONSTERS: document.getElementById('cfg-monsters').checked,
+                INITIAL_MONSTERS: parseInt(document.getElementById('cfg-init-monsters').value) || 2
             };
 
             for (const [key, value] of Object.entries(updates)) {
@@ -156,12 +159,13 @@ export class SimulationEngine {
             document.getElementById('settings-modal').classList.add('hidden');
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('start-actions').style.display = 'none';
-            
+
             // Re-hide init state fields after start
             document.getElementById('row-init-red-males').style.display = 'none';
             document.getElementById('row-init-red-females').style.display = 'none';
             document.getElementById('row-init-blue-males').style.display = 'none';
             document.getElementById('row-init-blue-females').style.display = 'none';
+            document.getElementById('row-init-monsters').style.display = 'none';
         });
 
         // Modal logic
@@ -207,8 +211,9 @@ export class SimulationEngine {
         document.getElementById('cfg-show-awareness').addEventListener('change', e => updateConfig('ENABLE_SHOW_AWARENESS', e.target.checked));
         document.getElementById('cfg-interaction-radius').addEventListener('change', e => updateConfig('INTERACTION_RADIUS', parseInt(e.target.value)));
         document.getElementById('cfg-show-interaction').addEventListener('change', e => updateConfig('ENABLE_SHOW_INTERACTION', e.target.checked));
-        
+
         // New Settings bindings
+        document.getElementById('cfg-monsters').addEventListener('change', e => updateConfig('ENABLE_MONSTERS', e.target.checked));
         document.getElementById('cfg-max-food').addEventListener('change', e => updateConfig('MAX_FOOD', parseInt(e.target.value)));
         document.getElementById('cfg-food-nut').addEventListener('change', e => updateConfig('FOOD_NUTRITION', parseInt(e.target.value)));
         document.getElementById('cfg-tribes').addEventListener('change', e => updateConfig('ENABLE_TRIBES', e.target.checked));
@@ -242,8 +247,15 @@ export class SimulationEngine {
 
         document.getElementById('stat-infected').innerText = data.demographics.infectedCount;
         document.getElementById('stat-food').innerText = data.demographics.foodCount;
+
         document.getElementById('stat-tribe-red').innerText = data.demographics.tribeRed;
         document.getElementById('stat-tribe-blue').innerText = data.demographics.tribeBlue;
+        document.getElementById('stat-monsters').innerText = data.demographics.monsterCount || 0;
+        if (document.getElementById('stat-monster-births')) {
+            document.getElementById('stat-monster-births').innerText = data.stats.monster_births || 0;
+            document.getElementById('stat-monster-fights').innerText = data.stats.monster_fights || 0;
+            document.getElementById('stat-monster-deaths').innerText = data.stats.monster_deaths || 0;
+        }
 
         document.getElementById('stat-encounters').innerText = data.stats.encounters;
         document.getElementById('stat-kills').innerText = data.stats.kills;
@@ -370,6 +382,63 @@ export class SimulationEngine {
             this.ctx.fill();
             this.ctx.globalAlpha = 1.0;
         }
+
+        if (data.monsterBuffer) {
+            const mBuffer = new Float32Array(data.monsterBuffer);
+            for (let i = 0; i < mBuffer.length; i += 5) {
+                const mx = mBuffer[i];
+                const my = mBuffer[i + 1];
+                const mr = mBuffer[i + 2];
+                const hpRatio = mBuffer[i + 3];
+                const hungerRatio = mBuffer[i + 4]; this.ctx.save();
+                this.ctx.shadowBlur = 10;
+                this.ctx.shadowColor = '#FF7400'; // Amber Glow
+                this.ctx.fillStyle = '#FFCE00'; // Gold Body
+
+                // Draw irregular blob shape
+                this.ctx.beginPath();
+                const points = 16;
+                for (let j = 0; j <= points; j++) {
+                    const angle = (j / points) * Math.PI * 2;
+                    // Use sinusoidal offsets with integer multipliers to ensure shape connects seamlessly at 0 and 2pi
+                    const offset = Math.sin(angle * 5) * (mr * 0.15) + Math.cos(angle * 4 + mx) * (mr * 0.2);
+                    const rad = mr + offset;
+
+                    const px = mx + Math.cos(angle) * rad;
+                    const py = my + Math.sin(angle) * rad;
+                    if (j === 0) this.ctx.moveTo(px, py);
+                    else this.ctx.lineTo(px, py);
+                }
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                // Clear shadow for UI elements so they don't glow
+                this.ctx.shadowBlur = 0;
+
+                // Hunger Arc (Draw around monster, completely clearing the wobbly blob body)
+                if (CONFIG.ENABLE_HUNGER && hungerRatio < 1.0) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(mx, my, mr * 1.45, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.max(0, Math.min(1, hungerRatio))));
+                    const rgbR = Math.floor(255 * (1 - hungerRatio));
+                    const rgbG = Math.floor(255 * hungerRatio);
+                    this.ctx.strokeStyle = `rgba(${rgbR}, ${rgbG}, 0, 0.8)`;
+                    this.ctx.lineWidth = 4;
+                    this.ctx.lineCap = 'round';
+                    this.ctx.stroke();
+                }
+
+                // HP Bar (Draw cleanly above the hunger arc)
+                if (hpRatio < 1.0) {
+                    const barWidth = mr * 2.2;
+                    this.ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+                    this.ctx.fillRect(mx - barWidth / 2, my - mr * 1.45 - 12, barWidth, 5);
+                    this.ctx.fillStyle = '#10b981';
+                    this.ctx.fillRect(mx - barWidth / 2, my - mr * 1.45 - 12, barWidth * hpRatio, 5);
+                }
+
+                this.ctx.restore();
+            }
+        }
     }
 
     loop() {
@@ -379,6 +448,10 @@ export class SimulationEngine {
 
             this.drawFrame(data);
             this.updateUI(data);
+
+            if (data.events && data.events.length > 0) {
+                data.events.forEach(ev => this.displayEventLog(ev));
+            }
 
             if (data.selectedAgent) {
                 if (data.selectedAgent.dead) {
@@ -395,30 +468,62 @@ export class SimulationEngine {
         requestAnimationFrame(this.loop);
     }
 
+    displayEventLog(event) {
+        const container = document.getElementById('event-logs-container');
+        if (!container) return;
+
+        const el = document.createElement('div');
+        el.className = `event-log-entry ${event.type}`;
+        el.innerText = event.msg;
+
+        container.prepend(el);
+
+        // Remove older logs if there are too many (max 8)
+        while (container.children.length > 8) {
+            container.removeChild(container.lastChild);
+        }
+
+        setTimeout(() => {
+            if (el.parentElement) {
+                el.classList.add('fade-out');
+                setTimeout(() => {
+                    if (el.parentElement) el.remove();
+                }, 1000);
+            }
+        }, 5000); // Wait 5 seconds before fading out
+    }
+
     updateEntityStatsPanel(a) {
+        if (!a) return;
+        document.getElementById('entity-stats-panel').classList.remove('hidden');
+
         document.getElementById('ent-name').innerText = a.name;
         document.getElementById('ent-gender').innerText = a.gender;
-        document.getElementById('ent-gender').style.color = a.gender === GENDER.MALE ? '#60a5fa' : '#f472b6';
-        document.getElementById('ent-age').innerText = `${a.age} (${a.stage})`;
-
-        // Color age by life stage
+        document.getElementById('ent-gender').style.color = a.gender === 'N/A' ? '#a1a1aa' : (a.gender === 'Male' ? '#60a5fa' : '#f472b6');
+        
         const ageEl = document.getElementById('ent-age');
-        if (a.stage === 'Child') ageEl.style.color = '#86efac';
-        else if (a.stage === 'Teen') ageEl.style.color = '#fde68a';
-        else if (a.stage === 'Adult') ageEl.style.color = '#f8fafc';
-        else ageEl.style.color = '#94a3b8';
+        if (a.age === 'Immortal') {
+            ageEl.innerText = `Immortal`;
+            ageEl.style.color = '#ef4444';
+        } else {
+            ageEl.innerText = `${a.age} (${a.stage})`;
+            if (a.stage === 'Child') ageEl.style.color = '#86efac';
+            else if (a.stage === 'Teen') ageEl.style.color = '#fde68a';
+            else if (a.stage === 'Adult') ageEl.style.color = '#f8fafc';
+            else ageEl.style.color = '#94a3b8';
+        }
 
         document.getElementById('ent-strength').innerText = a.strength;
         document.getElementById('ent-intelligence').innerText = a.intelligence;
         document.getElementById('ent-offspring').innerText = a.offspringCount;
 
         const incestEl = document.getElementById('ent-incest');
-        incestEl.innerText = a.bornOfIncest ? "Yes" : "No";
-        incestEl.style.color = a.bornOfIncest ? "#ef4444" : "#10b981";
+        incestEl.innerText = a.bornOfIncest === 'N/A' ? 'N/A' : (a.bornOfIncest ? "Yes" : "No");
+        incestEl.style.color = a.bornOfIncest === 'N/A' ? '#a1a1aa' : (a.bornOfIncest ? "#ef4444" : "#10b981");
 
         // Personality & Drives
         document.getElementById('ent-personality').innerText = a.personality;
-        document.getElementById('ent-personality').style.color = a.personality === 'Introvert' ? '#818cf8' : '#34d399';
+        document.getElementById('ent-personality').style.color = a.personality === 'Bloodthirsty' ? '#ef4444' : (a.personality === 'Introvert' ? '#818cf8' : '#34d399');
         document.getElementById('ent-libido').innerText = a.libido;
         document.getElementById('ent-fighter').innerText = a.fighter;
         document.getElementById('ent-charm').innerText = a.charm;
@@ -426,14 +531,16 @@ export class SimulationEngine {
         // Partner Preferences
         document.getElementById('ent-pref-str').innerText = a.prefMinStrength;
         document.getElementById('ent-pref-int').innerText = a.prefMinIntelligence;
-        document.getElementById('ent-pref-pers').innerText = a.prefPersonality || 'Any';
+        document.getElementById('ent-pref-pers').innerText = (a.prefPersonality === 'none' || a.prefPersonality === 'N/A') ? 'Any' : a.prefPersonality;
     }
 
     checkGameOver(data) {
         if (this.isPaused || this.isGameOverFlag) return;
 
         let reason = null;
-        if (data.demographics.pop === 0) {
+        if (data.demographics.pop === 0 && data.demographics.monsterCount > 0) {
+            reason = "EATEN ALIVE: Monsters devoured humanity.";
+        } else if (data.demographics.pop === 0) {
             reason = "EXTINCTION EVENT: The entire population was wiped out.";
         } else if (CONFIG.ENABLE_MAX_POPULATION && data.demographics.pop >= CONFIG.MAX_POPULATION) {
             reason = "OVERPOPULATION: The world reached its max carrying capacity.";
@@ -463,6 +570,11 @@ export class SimulationEngine {
 
         document.getElementById('go-avg-str').innerText = data.analytics.avgStr;
         document.getElementById('go-avg-int').innerText = data.analytics.avgInt;
+
+        document.getElementById('go-monster-pop').innerText = data.demographics.monsters || 0;
+        document.getElementById('go-monster-deaths').innerText = data.stats.monster_deaths || 0;
+        document.getElementById('go-monster-fights').innerText = data.stats.monster_fights || 0;
+        document.getElementById('go-monster-births').innerText = data.stats.monster_births || 0;
 
         if (data.analytics.prolificCount > 0) {
             document.getElementById('go-prolific').innerText = `${data.analytics.prolificName} (${data.analytics.prolificCount} children)`;

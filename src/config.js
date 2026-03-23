@@ -17,6 +17,14 @@ export const CONFIG = {
     MAX_POPULATION: 300,
     BG_COLOR: '#0f172a',
 
+    // Monsters
+    ENABLE_MONSTERS: true,
+    INITIAL_MONSTERS: 2,
+    MONSTER_RADIUS: 25,
+    MONSTER_SPEED: 0.32,
+    MONSTER_AWARENESS: 600,
+    MONSTER_SPAWN_INTERVAL: 1800, // E.g., spawn a new monster every 30 years (1800 ticks at 60tpy)
+
     // Mechanisms
     ENABLE_FIGHTING: true,
     ENABLE_REPRODUCTION: true,

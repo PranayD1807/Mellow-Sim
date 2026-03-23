@@ -3,13 +3,16 @@ import { Agent } from './Agent.js?v=123456';
 import { InteractionManager } from './InteractionManager.js?v=123456';
 import { Particle } from './Particle.js?v=123456';
 import { rand, clearAllNames } from './utils.js?v=123456';
+import { Monster } from './Monster.js?v=123456';
 
 let agents = [];
 let particles = [];
 let foods = [];
+let monsters = [];
 let worldTick = 0;
 let interactionManager = new InteractionManager();
 let selectedAgentId = null;
+let godEvents = [];
 
 let nextAgentId = 1;
 const idMap = new Map();
@@ -23,11 +26,13 @@ function reset(w, h) {
     agents = [];
     particles = [];
     foods = [];
+    monsters = [];
     worldTick = 0;
     idMap.clear();
     clearAllNames();
     interactionManager.reset();
     selectedAgentId = null;
+    godEvents = [];
 
     canvasWidth = w;
     canvasHeight = h;
@@ -69,6 +74,17 @@ function reset(w, h) {
         idMap.set(a.intId, a);
         agents.push(a);
     }
+    
+    if (CONFIG.ENABLE_MONSTERS) {
+        for (let i = 0; i < (CONFIG.INITIAL_MONSTERS || 0); i++) {
+            let rx = rand(margin, canvasWidth - margin);
+            let ry = rand(margin, canvasHeight - margin);
+            const m = new Monster(rx, ry);
+            m.intId = nextAgentId++;
+            idMap.set(m.intId, m);
+            monsters.push(m);
+        }
+    }
 }
 
 self.onmessage = function (e) {
@@ -93,6 +109,7 @@ self.onmessage = function (e) {
             for (let i = 0; i < 5; i++) {
                 foods.push({ x: data.x + (Math.random() * 40 - 20), y: data.y + (Math.random() * 40 - 20), consumed: false });
             }
+            godEvents.push({ type: 'divine', msg: '🍔 The Heavens dropped a bounty of Food.' });
         } else if (data.action === 'lightning') {
             let closest = null, minD = Infinity;
             agents.forEach(a => { const d = Math.hypot(a.x - data.x, a.y - data.y); if (d < minD) { minD = d; closest = a; } });
@@ -100,6 +117,7 @@ self.onmessage = function (e) {
                 closest.markedForDeath = true;
                 // Add red lightning particles
                 for (let i = 0; i < 20; i++) particles.push(new Particle(closest.x, closest.y, '#ef4444'));
+                godEvents.push({ type: 'divine', msg: `⚡ Divine Smite! ${closest.name} was struck by Lightning.` });
             }
         } else if (data.action === 'potion') {
             let closest = null, minD = Infinity;
@@ -109,6 +127,7 @@ self.onmessage = function (e) {
                 closest.charm = 100;
                 // Add pink love particles
                 for (let i = 0; i < 15; i++) particles.push(new Particle(closest.x, closest.y, '#f472b6'));
+                godEvents.push({ type: 'romance', msg: `💖 ${closest.name} feels undeniably charming after drinking the Love Potion.` });
             }
         } else if (data.action === 'plague') {
             let closest = null, minD = Infinity;
@@ -154,7 +173,9 @@ function runLoop() {
         agents[i].mapHeight = canvasHeight;
     }
 
-    interactionManager.process(agents, particles, foods, worldTick);
+    interactionManager.process(agents, particles, foods, worldTick, monsters);
+    interactionManager.processMonsterInteractions(agents, monsters, particles, worldTick);
+    interactionManager.processMonsterVsMonster(monsters, particles);
 
     if (CONFIG.ENABLE_HUNGER && worldTick % 30 === 0 && foods.length < CONFIG.MAX_FOOD) {
         foods.push({ x: Math.random() * canvasWidth, y: Math.random() * canvasHeight, consumed: false });
@@ -177,6 +198,36 @@ function runLoop() {
         }
         a.update(canvasWidth, canvasHeight, worldTick);
     });
+
+    if (CONFIG.ENABLE_MONSTERS) {
+        // Periodic Spawning of new monsters automatically
+        if (worldTick > 0 && worldTick % CONFIG.MONSTER_SPAWN_INTERVAL === 0) {
+            let rx = Math.random() < 0.5 ? rand(-50, 0) : rand(canvasWidth, canvasWidth + 50);
+            let ry = rand(-50, canvasHeight + 50);
+            const m = new Monster(rx, ry);
+            m.intId = nextAgentId++;
+            idMap.set(m.intId, m);
+            monsters.push(m);
+            godEvents.push({ type: 'combat', msg: `🚨 A new Monster has encroached upon the land!` });
+        }
+
+        monsters = monsters.filter(m => {
+            if (m.markedForDeath) {
+                idMap.delete(m.intId);
+                return false;
+            }
+            return true;
+        });
+
+        monsters.forEach(m => {
+            if (!m.intId) {
+                m.intId = nextAgentId++;
+                idMap.set(m.intId, m);
+            }
+            m.steer(agents, foods, worldTick, monsters);
+            m.update(canvasWidth, canvasHeight, worldTick, foods);
+        });
+    }
 
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -246,27 +297,58 @@ function runLoop() {
         foodBuffer[fOffset++] = foods[i].y;
     }
 
+    const monsterBuffer = new Float32Array(monsters.length * 5);
+    let mOffset = 0;
+    for (let i = 0; i < monsters.length; i++) {
+        monsterBuffer[mOffset++] = monsters[i].x;
+        monsterBuffer[mOffset++] = monsters[i].y;
+        monsterBuffer[mOffset++] = monsters[i].radius;
+        monsterBuffer[mOffset++] = monsters[i].hp / monsters[i].maxHp; // hp ratio for visual indicator
+        monsterBuffer[mOffset++] = CONFIG.ENABLE_HUNGER ? (monsters[i].hunger / CONFIG.MAX_HUNGER) : 1; // hunger ratio
+    }
+
     let selectedAgentData = null;
     if (selectedAgentId && idMap.has(selectedAgentId)) {
         const a = idMap.get(selectedAgentId);
-        selectedAgentData = {
-            id: a.intId,
-            name: a.name,
-            gender: a.gender,
-            age: a.getAge(worldTick),
-            stage: a.getLifeStage(worldTick),
-            strength: a.strength,
-            intelligence: a.intelligence,
-            offspringCount: a.offspringCount,
-            bornOfIncest: a.bornOfIncest,
-            personality: a.personality,
-            libido: a.libido,
-            fighter: a.fighter,
-            charm: a.charm,
-            prefMinStrength: a.prefMinStrength,
-            prefMinIntelligence: a.prefMinIntelligence,
-            prefPersonality: a.prefPersonality,
-        };
+        if (a instanceof Monster) {
+            selectedAgentData = {
+                id: a.intId,
+                name: 'Aberrant Monster',
+                gender: 'N/A',
+                age: 'Immortal',
+                stage: 'Apex Predator',
+                strength: a.strength,
+                intelligence: a.intelligence,
+                offspringCount: 'N/A',
+                bornOfIncest: 'N/A',
+                personality: 'Bloodthirsty',
+                libido: 'N/A',
+                fighter: 100,
+                charm: 'N/A',
+                prefMinStrength: 'N/A',
+                prefMinIntelligence: 'N/A',
+                prefPersonality: 'N/A',
+            };
+        } else {
+            selectedAgentData = {
+                id: a.intId,
+                name: a.name,
+                gender: a.gender,
+                age: a.getAge(worldTick),
+                stage: a.getLifeStage(worldTick),
+                strength: a.strength,
+                intelligence: a.intelligence,
+                offspringCount: a.offspringCount,
+                bornOfIncest: a.bornOfIncest,
+                personality: a.personality,
+                libido: a.libido,
+                fighter: a.fighter,
+                charm: a.charm,
+                prefMinStrength: a.prefMinStrength,
+                prefMinIntelligence: a.prefMinIntelligence,
+                prefPersonality: a.prefPersonality,
+            };
+        }
     } else if (selectedAgentId) {
         selectedAgentData = { dead: true };
     }
@@ -281,11 +363,14 @@ function runLoop() {
             born: interactionManager.stats.offspring_born,
             incest_born: interactionManager.stats.incest_born,
             natural_deaths: interactionManager.stats.natural_deaths,
+            monster_births: interactionManager.stats.monster_births,
+            monster_fights: interactionManager.stats.monster_fights,
+            monster_deaths: interactionManager.stats.monster_deaths
         },
         demographics: {
             pop: agents.length,
             males, females, intro, extro, incest,
-            tribeRed, tribeBlue, infectedCount, foodCount: foods.length
+            tribeRed, tribeBlue, infectedCount, foodCount: foods.length, monsterCount: monsters.length
         },
         analytics: {
             avgStr: agents.length ? Math.round(totalStr / agents.length) : '-',
@@ -295,13 +380,18 @@ function runLoop() {
             strongestName: strongest ? strongest.name : 'None',
             strongestStr: strongest ? strongest.str : 0
         },
+        events: [...interactionManager.events, ...godEvents],
         selectedAgent: selectedAgentData,
         agentBuffer: agentBuffer.buffer,
         particleBuffer: particleBuffer.buffer,
-        foodBuffer: foodBuffer.buffer
+        foodBuffer: foodBuffer.buffer,
+        monsterBuffer: monsterBuffer.buffer
     };
 
-    self.postMessage(payload, [agentBuffer.buffer, particleBuffer.buffer, foodBuffer.buffer]);
+    interactionManager.events = [];
+    godEvents = [];
+
+    self.postMessage(payload, [agentBuffer.buffer, particleBuffer.buffer, foodBuffer.buffer, monsterBuffer.buffer]);
 
     timeoutId = setTimeout(runLoop, 16);
 }
