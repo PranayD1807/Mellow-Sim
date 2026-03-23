@@ -48,3 +48,10 @@ The simulation has an emergency failsafe to prevent total civilization collapse 
 - **Tribe Ceasefire:** If a desperate agent comes near a scarce gender member—*even if they belong to an enemy tribe*—war hostility is completely bypassed. They aggressively charge toward each other with a massive 1.5x steering override force.
 - **Guaranteed Procreation:** When they connect, they mate instantly with a 100% guaranteed success rate, completely ignoring any breeding cooldowns, tribe prejudices, and minimum stat preferences.
 - **The "Romeo & Juliet" Buff:** Because this was a cross-tribe romance, the resulting child is born as a hybrid. Hybrids are granted an immense statistical advantage, inherently clamping their starting Strength and Intelligence between 90-100, and fully maximizing their Fighter trait.
+
+## 7. Monster Mechanics
+- **Spawning:** Monsters are Aberrant apex predators that occasionally spawn at the edges of the world.
+- **Hunting and Combat:** Monsters actively hunt and devour human agents. When caught, regular humans are instantly killed unless they are incredibly strong and intelligent, in which case they have a chance to heroically strike back, surviving the encounter or even slaying the monster.
+- **Territorial Disputes:** Monsters are highly territorial. If two monsters cross paths, they will engage in a brutal Titan clash (Monster Fights), dealing massive damage to one another until one or both are dead.
+- **Devouring & Starvation:** Monsters have enormous hunger capacities. Devouring humans provides them with massive nutritional sustenance. If they fail to catch prey, they will eventually starve and die.
+- **Aberrant Mating (Rare):** Very rarely (15% chance), a monster may spare an adult female and reproduce, spawning a new monster offspring (Monster Births) with extreme base stats derived from both parents.

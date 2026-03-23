@@ -69,7 +69,15 @@ When two agents of **different genders** meet:
 5.  **Inheritance**: Children inherit averaged stats from both parents with mutation. **Incest** dramatically lowers output stats unless the tribe is desperate. **Cross-Tribe Romeo & Juliet mating** massively boosts the child's genetic ceiling.
 6.  Both parents enter a reproduction cooldown period.
 
-## 5. Design Guidelines for Expansion
+## 5. Monster Interactions
+*   **Apex Predators**: Monsters target the nearest human within their massive awareness radius.
+*   **Devouring**: When a Monster catches a human, the human is typically instantly killed.
+    *   **Heroic Survival**: Very strong and intelligent humans have a small percentage chance to survive the blow and knock the monster back.
+    *   **Heroic Slaying**: If a human deals enough damage to deplete the monster's HP, they heroically slay the beast.
+*   **Monster vs Monster**: Monsters are inherently territorial. If two monsters collide, they deal 40% of their strength as damage to each other and violently push apart (recorded in UI as **Monster Fights**).
+*   **Aberrant Reproduction**: There is a 15% chance when a monster encounters an adult female human that it will spare her and reproduce instead, spawning a new monster with combined extreme stats (recorded in UI as **Monster Births**).
+
+## 6. Design Guidelines for Expansion
 *   **Simplicity**: The game is designed to be straightforward. Future systems (e.g. food, age, disease, alliances) should plug into this base without convoluting the core loop.
 *   **Clean Code**: Emphasize readability, modularity, and explicit state management.
 *   **Performance**: Optimize proximity checks (e.g., spatial partitioning) if population scales up.
