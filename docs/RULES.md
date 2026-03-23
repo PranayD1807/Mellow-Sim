@@ -40,7 +40,8 @@ Agents don't just drift randomly — they exhibit behavioral steering based on t
 2.  **Libido-based force**: High-libido agents steer toward opposite-gender agents. Low-libido agents steer away.
 3.  **Fighter-based force**: High-fighter agents steer toward same-gender agents. Low-fighter agents steer away.
 4.  **Random drift**: A small amount of noise is applied to prevent perfectly predictable paths.
-5.  **Speed clamping**: Agents cannot exceed `MAX_SPEED` and have a minimum speed floor to prevent stalling.
+5.  **Needs-based overrides**: Hunger forces tracking food, while encountering the plague, or entering an extinction-level population event, forces massive homing steering toward Tribe/World Capitals.
+6.  **Speed clamping**: Agents cannot exceed `MAX_SPEED` and have a minimum speed floor to prevent stalling.
 
 Steering is computed within an `AWARENESS_RADIUS` (default: 80px) — agents can only "sense" others within this range.
 
@@ -61,12 +62,11 @@ When two agents of **different genders** meet:
 1.  **Cooldown check**: Both agents must not be on reproduction cooldown.
 2.  **Mutual preference check**: Both agents evaluate each other against their personal preferences (min strength, min intelligence, preferred personality). The partner's **charm** can compensate for shortfalls.
 3.  **Reproduction roll**: If both accept, a probability roll is made based on their average libido.
-4.  **Offspring count** (0–3, weighted):
-    *   10% chance of 0 offspring
-    *   40% chance of 1 offspring
-    *   35% chance of 2 offspring
-    *   15% chance of 3 offspring
-5.  **Inheritance**: Children inherit averaged stats from both parents with mutation. Personality traits are inherited with a 30% chance of random mutation.
+4.  **Offspring count** (0–2, weighted probabilities):
+    *   2% chance of 0 offspring
+    *   73% chance of 1 offspring
+    *   25% chance of 2 offspring (twins)
+5.  **Inheritance**: Children inherit averaged stats from both parents with mutation. **Incest** dramatically lowers output stats unless the tribe is desperate. **Cross-Tribe Romeo & Juliet mating** massively boosts the child's genetic ceiling.
 6.  Both parents enter a reproduction cooldown period.
 
 ## 5. Design Guidelines for Expansion

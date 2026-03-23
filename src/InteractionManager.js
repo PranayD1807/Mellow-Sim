@@ -86,6 +86,14 @@ export class InteractionManager {
             // Huge chance of war when meeting an enemy tribe member
             fightChance = clamp(avgFighter / 100 + 0.5, 0.5, 0.95);
         } else {
+            // Diplomacy: High intelligence can de-escalate inner-tribe conflict
+            const avgIntelligence = (a.intelligence + b.intelligence) / 2;
+            const deescalationChance = clamp((avgIntelligence - 30) / 100, 0, 1);
+            if (Math.random() < deescalationChance) {
+                // Successfully de-escalated through diplomacy
+                this.pushApart(a, b, 0.5);
+                return;
+            }
             // Lower chance for inner-tribe scuffles
             fightChance = clamp((avgFighter - 40) / 100, 0.05, 0.4);
         }
@@ -295,7 +303,8 @@ export class InteractionManager {
         this.processAging(agentsArray, particlesArray, worldTick);
 
         // Build Spatial Hash Grid to transform O(N^2) bottleneck into O(N)
-        const cell_size = CONFIG.AWARENESS_RADIUS; // e.g. 80
+        // Max awareness is now 1.5x for highly intelligent agents
+        const cell_size = CONFIG.AWARENESS_RADIUS * 1.5;
         const grid = new Map();
 
         for (let i = 0; i < agentsArray.length; i++) {
@@ -330,7 +339,7 @@ export class InteractionManager {
                             if (a === b || b.markedForDeath) continue;
 
                             const dist = distance(a, b);
-                            if (dist < CONFIG.AWARENESS_RADIUS) {
+                            if (dist < a.dynamicAwarenessRadius) {
                                 nearbyAwareness.push(b);
                             }
                             // To avoid double-resolving interactions, we enforce a strict ID check
@@ -366,7 +375,7 @@ export class InteractionManager {
 
                 const isSameTribe = !CONFIG.ENABLE_TRIBES || a.tribe === b.tribe;
                 const isOppositeGender = a.gender !== b.gender;
-                
+
                 // If the genders are severely unbalanced and chances of civilisation dying are high
                 const isDesperateRepro = isOppositeGender && ((a.seeksScarceGender && b.isScarceGender) || (b.seeksScarceGender && a.isScarceGender));
 

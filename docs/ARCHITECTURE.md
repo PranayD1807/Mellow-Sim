@@ -2,7 +2,8 @@
 
 ## 1. Tech Stack Overview
 To ensure the game is lightweight, easily readable, cross-platform, and runs entirely locally, we will use modern Web Technologies:
-*   **Core Logic & Rendering**: Vanilla JavaScript (ES6 Modules) and the HTML5 `<canvas>` API for rendering. This removes the need for heavy game engines and ensures an ultra-lite footprint.
+*   **Core Logic & Rendering**: Vanilla JavaScript (ES6 Modules) and the HTML5 `<canvas>` API for rendering. A dedicated **Web Worker** runs the core simulation to offload computationally heavy calculations.
+*   **Data Structures**: Data-Oriented Design employing `Float32Array` buffers to pass render state seamlessly between the worker and the main thread.
 *   **Styling**: Vanilla CSS for GUI and styling.
 *   **Build Tool (Optional but Recommended)**: Vite to easily serve the app locally during development and bundle it for any platform (can later be wrapped with Electron or Tauri if a native desktop executable is desired, though a browser is perfectly cross-platform).
 
@@ -14,14 +15,15 @@ The codebase will be split into logical components to ensure it is very easy to 
 *   **State**: `id`, `x`, `y`, `gender`, `strength`, `intelligence`, `color`, `velocity`.
 *   **Behavior**: Contains methods for movement (`updatePosition`), drawing (`draw`), and returning its stats.
 
-### 2.2. `Simulation Core` (Game Loop)
-*   Responsible for the `requestAnimationFrame` loop.
-*   Holds the array of all active `Agent` entities.
+### 2.2. `Simulation Core` (Game Loop / Web Worker)
+*   The fundamental physics and agent AI loops operate entirely inside a background Web Worker (`worker.js`), ensuring main thread UI and rendering never lag.
+*   Employs a **Spatial Hash Grid** to reduce entity collision checks from O(N²) to O(N).
 *   **Tick Flow**:
-    1.  Update all agents' positions (e.g., random walk or basic steering).
-    2.  Check for collisions / proximity between distinct agents.
-    3.  Resolve interactions (Conflict or Reproduction).
-    4.  Clear canvas and redraw all entities.
+    1.  Build the Spatial Hash Grid.
+    2.  Calculate advanced multi-weighted steering (Awareness, Hunger, Plague Avoidance, Tribe/World Capital homing).
+    3.  Check for interactions (Conflict, Reproduction, Infection transmission).
+    4.  Pack all state (X, Y, Radius, Color, ID) into efficient `Float32Array` buffers.
+    5.  `postMessage` the buffers back to `SimulationEngine.js` for rapid `<canvas>` rendering.
 
 ### 2.3. `Interaction Manager`
 *   A dedicated module/class that handles the logic of what happens when Agent A and Agent B meet.

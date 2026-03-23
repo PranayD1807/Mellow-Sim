@@ -176,6 +176,18 @@ export class SimulationEngine {
             settingsModal.classList.add('hidden');
         });
 
+        // Demographics panel logic
+        const statsPanel = document.getElementById('stats-panel');
+        const btnOpenStats = document.getElementById('btn-open-stats');
+        document.getElementById('btn-close-stats').addEventListener('click', () => {
+            statsPanel.classList.add('hidden');
+            btnOpenStats.classList.remove('hidden');
+        });
+        btnOpenStats.addEventListener('click', () => {
+            statsPanel.classList.remove('hidden');
+            btnOpenStats.classList.add('hidden');
+        });
+
         const updateConfig = (key, val) => {
             CONFIG[key] = val;
             this.worker.postMessage({ type: 'CONFIG', key, value: val });

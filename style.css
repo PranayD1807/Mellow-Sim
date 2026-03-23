@@ -95,6 +95,7 @@ header p {
   padding: 16px 24px;
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
+  pointer-events: auto;
 }
 
 #entity-stats-panel {

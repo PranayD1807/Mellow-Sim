@@ -74,6 +74,13 @@ export class Agent extends Entity {
     }
 
     /**
+     * Smarter agents stay aware in a wider radius
+     */
+    get dynamicAwarenessRadius() {
+        return CONFIG.AWARENESS_RADIUS * (1 + (this.intelligence / 200));
+    }
+
+    /**
      * Get the life stage label
      */
     getLifeStage(worldTick) {
@@ -143,6 +150,36 @@ export class Agent extends Entity {
         let steerX = 0;
         let steerY = 0;
 
+        // ------------------------------------
+        // Home Post / Tribe Capital Mechanic
+        // ------------------------------------
+        if (this.mapWidth && this.mapHeight) {
+            if (this.seeksScarceGender || this.isScarceGender) {
+                // End of the world: Everyone heads to the Tree of Life (Center of map) to find each other!
+                const targetX = this.mapWidth / 2;
+                const targetY = this.mapHeight / 2;
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 20) {
+                   steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                   steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                }
+            } else if (this.isDesperate) {
+                // Tribe is dying out: Head to Tribe Capital (Red = Left, Blue = Right) to regroup
+                const isRed = this.tribe === 'Red';
+                const targetX = isRed ? this.mapWidth * 0.2 : this.mapWidth * 0.8;
+                const targetY = this.mapHeight / 2;
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 20) {
+                   steerX += (dx / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                   steerY += (dy / dist) * 0.6 * CONFIG.STEER_STRENGTH;
+                }
+            }
+        }
+
         if (CONFIG.ENABLE_HUNGER && this.hunger < CONFIG.MAX_HUNGER * 0.7 && nearbyFood.length > 0) {
             let closestFood = null;
             let minDist = Infinity;
@@ -167,7 +204,7 @@ export class Agent extends Entity {
             const dx = other.x - this.x;
             const dy = other.y - this.y;
             const dist = Math.hypot(dx, dy);
-            if (dist < 1 || dist > CONFIG.AWARENESS_RADIUS) continue;
+            if (dist < 1 || dist > this.dynamicAwarenessRadius) continue;
 
             const nx = dx / dist;
             const ny = dy / dist;
@@ -180,9 +217,22 @@ export class Agent extends Entity {
                 // Overriding all logic: charge toward potential mate to save the civilization!
                 steerX += nx * 1.5 * CONFIG.STEER_STRENGTH;
                 steerY += ny * 1.5 * CONFIG.STEER_STRENGTH;
+            } else if (other.isInfected) {
+                // Plague "Social Distancing": Smart agents actively run away from green sick agents
+                const fleeUrge = Math.max(0, (this.intelligence - 50) / 50); // scales from 0 (at 50 int) to 1.0 (at 100 int)
+                if (fleeUrge > 0) {
+                    steerX -= nx * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
+                    steerY -= ny * fleeUrge * CONFIG.STEER_STRENGTH * 1.5;
+                }
             } else if (!isSameTribe) {
                 // Inter-tribe encounters: Aggressive agents charge, cowardly agents flee
-                const fightUrge = (this.fighter - 40) / 40; // High fighter (>40) will charge aggressively, Low fighter will scatter
+                let fightUrge = (this.fighter - 40) / 40; // High fighter (>40) will charge aggressively, Low fighter will scatter
+                
+                // Survival Instinct: If outmatched and intelligent, override anger and flee instead!
+                if (this.intelligence > 60 && this.strength < other.strength + 15) {
+                    fightUrge = -1.0; 
+                }
+
                 steerX += nx * fightUrge * CONFIG.STEER_STRENGTH;
                 steerY += ny * fightUrge * CONFIG.STEER_STRENGTH;
             } else if (isSameGender) {
@@ -197,7 +247,9 @@ export class Agent extends Entity {
                 let mateUrge = (this.libido - 30) / 100;
                 if (CONFIG.ENABLE_INCEST_PENALTY && this.isRelated(other)) {
                     // Flee from siblings normally, but interbreed if the tribe is desperate!
-                    mateUrge = this.isDesperate ? Math.max(0, mateUrge) : -2.0;
+                    // Smart agents actively avoid incest much harder to protect genetics.
+                    const incestRepulsion = -2.0 - (this.intelligence / 25);
+                    mateUrge = this.isDesperate ? Math.max(0, mateUrge) : incestRepulsion;
                 }
                 steerX += nx * mateUrge * CONFIG.STEER_STRENGTH;
                 steerY += ny * mateUrge * CONFIG.STEER_STRENGTH;
@@ -238,7 +290,8 @@ export class Agent extends Entity {
         }
 
         if (CONFIG.ENABLE_HUNGER) {
-            this.hunger -= CONFIG.STARVATION_RATE;
+            const intFactor = 1 - (this.intelligence / 400); // 0.75x to 1x metabolism
+            this.hunger -= (CONFIG.STARVATION_RATE * intFactor);
             if (this.hunger <= 0) {
                 this.markedForDeath = true;
                 this.deathReason = 'starvation';

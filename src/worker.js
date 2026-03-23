@@ -148,6 +148,10 @@ function runLoop() {
         agents[i].isDesperate = (tribeCounts[agents[i].tribe] < 12);
         agents[i].seeksScarceGender = (criticallyScarceGender && agents[i].gender !== criticallyScarceGender);
         agents[i].isScarceGender = (agents[i].gender === criticallyScarceGender);
+        
+        // Pass map dimensions so agents can navigate to Capitals
+        agents[i].mapWidth = canvasWidth;
+        agents[i].mapHeight = canvasHeight;
     }
 
     interactionManager.process(agents, particles, foods, worldTick);
