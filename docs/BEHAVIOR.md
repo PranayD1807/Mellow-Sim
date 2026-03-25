@@ -9,7 +9,7 @@ This document explains the core logic, entity interactions, and emergent behavio
 - **Resource Stats:** Hunger (Decays over time, refilled by eating food).
 
 ## 2. Spatial Awareness and Steering
-Agents use a computationally efficient *Data-Oriented Spatial Hash Grid* for O(N) localized targeting. They evaluate their environment within two radii: `AWARENESS_RADIUS` (which expands up to 1.5x for highly intelligent agents, giving them predator-like vision) and `INTERACTION_RADIUS`.
+Agents use a computationally efficient *Data-Oriented Spatial Hash Grid* for O(N) localized targeting. They evaluate their environment within two radii: `AWARENESS_RADIUS` (customizable) and `INTERACTION_RADIUS` (customizable). The `AGENT_RADIUS` is also adjustable globally.
 
 - **Social Steering:** 
   - Introverts gently repel each other, while extroverts have a slight attraction.
@@ -28,14 +28,14 @@ Agents use a computationally efficient *Data-Oriented Spatial Hash Grid* for O(N
 ## 4. Reproduction and Life Cycles
 - **Initiation:** Triggered when two opposite-gender adults (ages 18-49) collide. Both agents must pass each other's minimum preference checks (`prefMinStrength`, `prefMinIntelligence`, `prefPersonality`).
 - **Preference Degradation:** As an agent remains single, their rigid partner preferences degrade. Lonely agents constantly lower their standards so they can eventually reproduce.
-- **Mating:** If preferences are met, the probability of successful mating scales with their combined `Libido`. There is a small chance for triplets or twins. Parents then enter a temporary mating cooldown.
+- **Mating:** If preferences are met, the probability of successful mating scales with their combined `Libido`. There is a small chance for triplets or twins. Parents then enter a temporary mating cooldown (customizable).
 - **Genetics:** Offspring average their parents' stats with a sudden mutation variance (+/- 15%). Traits like `Charm`, `Libido`, and `Fighter` are also passed down or mutated randomly. 
 - **Incest Penalties:** If agents share a direct parent or are deeply related, reproducing applies a massive 40% penalty to the child's core traits. However, if the tribe is critically underpopulated, agents will prioritize survival over genetics, bypassing the incest penalty entirely.
 
 ## 5. Epidemics and Starvation
 - **The Plague:** Triggerable from the "God Toolbar", an infected agent glows green and acts as a carrier. Any interaction radius overlap with an infected agent spreads the plague instantly. Infected agents have a baseline random chance to drop dead every tick.
   - **Social Distancing:** Highly intelligent agents recognize the visual symptoms of the plague (the green glow) and will apply strong negative steering forces to actively run away from sick individuals.
-- **Starvation:** If `ENABLE_HUNGER` is active, agents passively lose hunger points on every tick. If it reaches 0, they starve to death.
+- **Starvation:** If `ENABLE_HUNGER` is active, agents passively lose hunger points on every tick (Rate and Tolerance are customizable). If it reaches 0, they starve to death.
   - **Efficient Metabolism:** Intelligent agents know how to ration their energy. An agent with maximum intelligence passively starves 25% slower than lower-tier members.
 
 ## 6. The "Saviors" Mechanic (Extinction Prevention)
@@ -50,8 +50,8 @@ The simulation has an emergency failsafe to prevent total civilization collapse 
 - **The "Romeo & Juliet" Buff:** Because this was a cross-tribe romance, the resulting child is born as a hybrid. Hybrids are granted an immense statistical advantage, inherently clamping their starting Strength and Intelligence between 90-100, and fully maximizing their Fighter trait.
 
 ## 7. Monster Mechanics
-- **Spawning:** Monsters are Aberrant apex predators that occasionally spawn at the edges of the world.
-- **Hunting and Combat:** Monsters actively hunt and devour human agents. When caught, regular humans are instantly killed unless they are incredibly strong and intelligent, in which case they have a chance to heroically strike back, surviving the encounter or even slaying the monster.
+- **Spawning:** Monsters are Aberrant apex predators that occasionally spawn at the edges of the world (Spawn Interval is customizable).
+- **Hunting and Combat:** Monsters actively hunt and devour human agents (Monster Speed and Awareness are customizable). When caught, regular humans are instantly killed unless they are incredibly strong and intelligent, in which case they have a chance to heroically strike back, surviving the encounter or even slaying the monster.
 - **Territorial Disputes:** Monsters are highly territorial. If two monsters cross paths, they will engage in a brutal Titan clash (Monster Fights), dealing massive damage to one another until one or both are dead.
 - **Devouring & Starvation:** Monsters have enormous hunger capacities. Devouring humans provides them with massive nutritional sustenance. If they fail to catch prey, they will eventually starve and die.
 - **Aberrant Mating (Rare):** Very rarely (15% chance), a monster may spare an adult female and reproduce, spawning a new monster offspring (Monster Births) with extreme base stats derived from both parents.

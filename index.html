@@ -68,6 +68,13 @@
                         <label style="color: #3b82f6;">Blue Females</label>
                         <input type="number" id="cfg-init-blue-females" value="15">
                     </div>
+                    <div class="setting-row" id="row-init-age">
+                        <label>Starting Age Range</label>
+                        <div style="display: flex; gap: 4px;">
+                            <input type="number" id="cfg-init-age-min" value="18" style="width: 45px;" title="Min Age">
+                            <input type="number" id="cfg-init-age-max" value="30" style="width: 45px;" title="Max Age">
+                        </div>
+                    </div>
 
                     <div class="stat-section-label">Environment</div>
                     <div class="setting-row">
@@ -87,6 +94,14 @@
                         <input type="number" id="cfg-food-nut" value="1500" step="100">
                     </div>
                     <div class="setting-row">
+                        <label>Hunger Tolerance</label>
+                        <input type="number" id="cfg-max-hunger" value="3000" step="100">
+                    </div>
+                    <div class="setting-row">
+                        <label>Starvation Rate</label>
+                        <input type="number" id="cfg-starve-rate" value="1" step="0.5">
+                    </div>
+                    <div class="setting-row">
                         <label>Enable Tribes</label>
                         <input type="checkbox" id="cfg-tribes" checked>
                     </div>
@@ -100,6 +115,20 @@
                         <label>Initial Monsters</label>
                         <input type="number" id="cfg-init-monsters" value="2">
                     </div>
+                    <div id="monster-extra-settings" style="display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(255,255,255,0.05); padding-left: 12px; margin-left: 4px;">
+                        <div class="setting-row">
+                            <label>Monster Speed</label>
+                            <input type="number" step="0.05" id="cfg-monster-speed" value="0.45">
+                        </div>
+                        <div class="setting-row">
+                            <label>Monster Awareness</label>
+                            <input type="number" id="cfg-monster-awareness" value="600">
+                        </div>
+                        <div class="setting-row">
+                            <label>Monster Spawn Rate</label>
+                            <input type="number" id="cfg-monster-spawn" value="1800" step="100">
+                        </div>
+                    </div>
                     <div class="setting-row">
                         <label>Fighting Mechanism</label>
                         <input type="checkbox" id="cfg-fighting" checked>
@@ -107,6 +136,10 @@
                     <div class="setting-row">
                         <label>Reproduction</label>
                         <input type="checkbox" id="cfg-repro" checked>
+                    </div>
+                    <div class="setting-row">
+                        <label>Repro Cooldown</label>
+                        <input type="number" id="cfg-repro-cooldown" value="100" step="10">
                     </div>
                     <div class="setting-row">
                         <label>Enable Hunger</label>
@@ -129,8 +162,26 @@
                         <input type="checkbox" id="cfg-pref" checked>
                     </div>
                     <div class="setting-row">
+                        <label>Standards Drop Gap</label>
+                        <input type="number" id="cfg-pref-interval" value="150" step="10">
+                    </div>
+                    <div class="setting-row">
                         <label>Mutation Rate</label>
                         <input type="number" step="0.05" id="cfg-mutation" value="0.15">
+                    </div>
+
+                    <div class="stat-section-label">Life Stages (Age)</div>
+                    <div class="setting-row">
+                        <label>Child State Ends</label>
+                        <input type="number" id="cfg-child-age" value="12">
+                    </div>
+                    <div class="setting-row">
+                        <label>Adult State Starts</label>
+                        <input type="number" id="cfg-teen-age" value="18">
+                    </div>
+                    <div class="setting-row">
+                        <label>Elder State Starts</label>
+                        <input type="number" id="cfg-elder-age" value="60">
                     </div>
 
                     <div class="stat-section-label">Simulation Dynamics</div>
@@ -141,6 +192,14 @@
                     <div class="setting-row">
                         <label>Base Move Speed</label>
                         <input type="number" step="0.1" id="cfg-speed" value="0.5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Steer Strength</label>
+                        <input type="number" step="0.01" id="cfg-steer" value="0.04">
+                    </div>
+                    <div class="setting-row">
+                        <label>Food Attraction</label>
+                        <input type="number" step="0.05" id="cfg-food-attract" value="0.15">
                     </div>
 
                     <div class="stat-section-label">Visuals & Ranges</div>
@@ -159,6 +218,10 @@
                     <div class="setting-row">
                         <label>Show Interaction</label>
                         <input type="checkbox" id="cfg-show-interaction">
+                    </div>
+                    <div class="setting-row">
+                        <label>Agent Radius</label>
+                        <input type="number" id="cfg-agent-radius" value="15">
                     </div>
                 </div>
 
@@ -454,7 +517,9 @@
 
     <script type="module">
         document.getElementById('cfg-monsters').addEventListener('change', (e) => {
-            document.getElementById('row-init-monsters').style.display = e.target.checked ? 'flex' : 'none';
+            const display = e.target.checked ? 'flex' : 'none';
+            document.getElementById('row-init-monsters').style.display = display;
+            document.getElementById('monster-extra-settings').style.display = display;
         });
     </script>
     <script type="module" src="src/main.js?v=123456"></script>

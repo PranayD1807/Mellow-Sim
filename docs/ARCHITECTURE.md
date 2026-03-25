@@ -33,6 +33,11 @@ The codebase will be split into logical components to ensure it is very easy to 
     *   `resolveConflict(agentA, agentB)`: Calculates probabilities and returns the surviving agent.
     *   `resolveReproduction(agentA, agentB)`: Calculates compatibility and returns an array of new offspring (0, 1, or 2 newly initialized `Agent` instances).
 
+### 2.4. Configuration Sync
+*   The simulation supports real-time configuration updates.
+*   When a user changes a setting in the GUI (`index.html`), the `SimulationEngine` updates its local `CONFIG` object and sends a `postMessage` with the new key-value pair to the Web Worker.
+*   The Worker updates its internal `CONFIG` state immediately, affecting subsequent simulation ticks without requiring a restart.
+
 ## 3. Directory Structure
 ```text
 sim-simulator/

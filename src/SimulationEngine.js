@@ -142,7 +142,25 @@ export class SimulationEngine {
                 MAX_POPULATION: parseInt(document.getElementById('cfg-max-pop').value) || 300,
                 MUTATION_RATE: parseFloat(document.getElementById('cfg-mutation').value) || 0.15,
                 ENABLE_MONSTERS: document.getElementById('cfg-monsters').checked,
-                INITIAL_MONSTERS: parseInt(document.getElementById('cfg-init-monsters').value) || 2
+                INITIAL_MONSTERS: parseInt(document.getElementById('cfg-init-monsters').value) || 2,
+
+                // New Settings
+                INITIAL_MIN_AGE: parseInt(document.getElementById('cfg-init-age-min').value) || 18,
+                INITIAL_MAX_AGE: parseInt(document.getElementById('cfg-init-age-max').value) || 30,
+                MAX_HUNGER: parseInt(document.getElementById('cfg-max-hunger').value) || 3000,
+                STARVATION_RATE: parseFloat(document.getElementById('cfg-starve-rate').value) || 1,
+                MONSTER_SPEED: parseFloat(document.getElementById('cfg-monster-speed').value) || 0.45,
+                MONSTER_AWARENESS: parseInt(document.getElementById('cfg-monster-awareness').value) || 600,
+                MONSTER_SPAWN_INTERVAL: parseInt(document.getElementById('cfg-monster-spawn').value) || 1800,
+                REPRODUCTION_COOLDOWN: parseInt(document.getElementById('cfg-repro-cooldown').value) || 100,
+                PREF_DEGRADE_INTERVAL: parseInt(document.getElementById('cfg-pref-interval').value) || 150,
+                CHILD_AGE: parseInt(document.getElementById('cfg-child-age').value) || 12,
+                TEEN_AGE: parseInt(document.getElementById('cfg-teen-age').value) || 18,
+                ELDER_AGE: parseInt(document.getElementById('cfg-elder-age').value) || 60,
+                STEER_STRENGTH: parseFloat(document.getElementById('cfg-steer').value) || 0.04,
+                FOOD_ATTRACTION: parseFloat(document.getElementById('cfg-food-attract').value) || 0.15,
+                AGENT_RADIUS: parseInt(document.getElementById('cfg-agent-radius').value) || 15,
+                SPRITE_SIZE: parseInt(document.getElementById('cfg-agent-radius').value) || 15
             };
 
             for (const [key, value] of Object.entries(updates)) {
@@ -165,7 +183,9 @@ export class SimulationEngine {
             document.getElementById('row-init-red-females').style.display = 'none';
             document.getElementById('row-init-blue-males').style.display = 'none';
             document.getElementById('row-init-blue-females').style.display = 'none';
+            document.getElementById('row-init-age').style.display = 'none';
             document.getElementById('row-init-monsters').style.display = 'none';
+            document.getElementById('monster-extra-settings').style.display = 'none';
         });
 
         // Modal logic
@@ -221,6 +241,25 @@ export class SimulationEngine {
         document.getElementById('cfg-max-age').addEventListener('change', e => updateConfig('MAX_AGE', parseInt(e.target.value)));
         document.getElementById('cfg-ticks-yr').addEventListener('change', e => updateConfig('TICKS_PER_YEAR', parseInt(e.target.value)));
         document.getElementById('cfg-speed').addEventListener('change', e => updateConfig('MAX_SPEED', parseFloat(e.target.value)));
+
+        // New Settings real-time bindings
+        document.getElementById('cfg-max-hunger').addEventListener('change', e => updateConfig('MAX_HUNGER', parseInt(e.target.value)));
+        document.getElementById('cfg-starve-rate').addEventListener('change', e => updateConfig('STARVATION_RATE', parseFloat(e.target.value)));
+        document.getElementById('cfg-monster-speed').addEventListener('change', e => updateConfig('MONSTER_SPEED', parseFloat(e.target.value)));
+        document.getElementById('cfg-monster-awareness').addEventListener('change', e => updateConfig('MONSTER_AWARENESS', parseInt(e.target.value)));
+        document.getElementById('cfg-monster-spawn').addEventListener('change', e => updateConfig('MONSTER_SPAWN_INTERVAL', parseInt(e.target.value)));
+        document.getElementById('cfg-repro-cooldown').addEventListener('change', e => updateConfig('REPRODUCTION_COOLDOWN', parseInt(e.target.value)));
+        document.getElementById('cfg-pref-interval').addEventListener('change', e => updateConfig('PREF_DEGRADE_INTERVAL', parseInt(e.target.value)));
+        document.getElementById('cfg-child-age').addEventListener('change', e => updateConfig('CHILD_AGE', parseInt(e.target.value)));
+        document.getElementById('cfg-teen-age').addEventListener('change', e => updateConfig('TEEN_AGE', parseInt(e.target.value)));
+        document.getElementById('cfg-elder-age').addEventListener('change', e => updateConfig('ELDER_AGE', parseInt(e.target.value)));
+        document.getElementById('cfg-steer').addEventListener('change', e => updateConfig('STEER_STRENGTH', parseFloat(e.target.value)));
+        document.getElementById('cfg-food-attract').addEventListener('change', e => updateConfig('FOOD_ATTRACTION', parseFloat(e.target.value)));
+        document.getElementById('cfg-agent-radius').addEventListener('change', e => {
+            const val = parseInt(e.target.value);
+            updateConfig('AGENT_RADIUS', val);
+            updateConfig('SPRITE_SIZE', val);
+        });
     }
 
     resize() {
@@ -500,7 +539,7 @@ export class SimulationEngine {
         document.getElementById('ent-name').innerText = a.name;
         document.getElementById('ent-gender').innerText = a.gender;
         document.getElementById('ent-gender').style.color = a.gender === 'N/A' ? '#a1a1aa' : (a.gender === 'Male' ? '#60a5fa' : '#f472b6');
-        
+
         const ageEl = document.getElementById('ent-age');
         if (a.age === 'Immortal') {
             ageEl.innerText = `Immortal`;
