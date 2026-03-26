@@ -169,6 +169,10 @@
                         <label>Mutation Rate</label>
                         <input type="number" step="0.05" id="cfg-mutation" value="0.15">
                     </div>
+                    <div class="setting-row">
+                        <label>Combat Weariness</label>
+                        <input type="checkbox" id="cfg-weariness" checked>
+                    </div>
 
                     <div class="stat-section-label">Life Stages (Age)</div>
                     <div class="setting-row">
@@ -325,6 +329,10 @@
                 <span class="stat-label">Monster Deaths</span>
                 <span id="stat-monster-deaths" class="stat-value" style="color: #6b21a8;">0</span>
             </div>
+            <div class="stat-box" title="Deaths from combat exhaustion">
+                <span class="stat-label">Exhaustion 💀</span>
+                <span id="stat-exhaustion-deaths" class="stat-value" style="color: #fb923c;">0</span>
+            </div>
         </div>
 
         <div id="entity-stats-panel" class="hidden">
@@ -364,12 +372,20 @@
                 <span id="ent-personality" class="stat-value">—</span>
             </div>
             <div class="stat-box">
+                <span class="stat-label" style="color:#a855f7;">Status</span>
+                <span id="ent-status" class="stat-value">Stable</span>
+            </div>
+            <div class="stat-box">
                 <span class="stat-label">Libido</span>
                 <span id="ent-libido" class="stat-value">0</span>
             </div>
             <div class="stat-box">
                 <span class="stat-label">Fighter</span>
                 <span id="ent-fighter" class="stat-value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label" style="color:#fb923c;">Weariness</span>
+                <span id="ent-weariness" class="stat-value">0</span>
             </div>
             <div class="stat-box">
                 <span class="stat-label">Charm</span>
@@ -434,12 +450,12 @@
                     <span id="go-years" class="stat-value">0</span>
                 </div>
                 <div class="stat-box">
-                    <span class="stat-label">Final Population</span>
+                    <span class="stat-label">Final Pop</span>
                     <span id="go-pop" class="stat-value">0</span>
                 </div>
-                <div class="stat-box">
-                    <span class="stat-label">Encounters</span>
-                    <span id="go-encounters" class="stat-value">0</span>
+                <div class="stat-box" style="color:#fbbf24;">
+                    <span class="stat-label">Peak Pop</span>
+                    <span id="go-peak" class="stat-value">0</span>
                 </div>
                 <div class="stat-box" style="color:#ef4444;">
                     <span class="stat-label">Murders</span>
@@ -507,6 +523,13 @@
             </div>
             <div style="font-size: 0.85rem; color: var(--text-main);">
                 <span style="color: var(--text-muted);">Strongest:</span> <span id="go-strongest">None</span>
+            </div>
+
+            <hr style="border: 0; height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0;" />
+
+            <div class="stat-section-label">History Track</div>
+            <div id="go-history-track" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px; font-size: 0.85rem; line-height: 1.4; border: 1px solid rgba(255,255,255,0.05); color: #d1d5db; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Milestones will appear here -->
             </div>
 
             <div style="margin-top: 16px; display: flex; justify-content: center;">

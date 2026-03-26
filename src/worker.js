@@ -176,6 +176,7 @@ function runLoop() {
     interactionManager.process(agents, particles, foods, worldTick, monsters);
     interactionManager.processMonsterInteractions(agents, monsters, particles, worldTick);
     interactionManager.processMonsterVsMonster(monsters, particles);
+    interactionManager.checkGlobalMilestones(agents, worldTick);
 
     if (CONFIG.ENABLE_HUNGER && worldTick % 30 === 0 && foods.length < CONFIG.MAX_FOOD) {
         foods.push({ x: Math.random() * canvasWidth, y: Math.random() * canvasHeight, consumed: false });
@@ -185,6 +186,9 @@ function runLoop() {
 
     agents = agents.filter(a => {
         if (a.markedForDeath) {
+            if (a.deathReason === 'exhaustion') {
+                interactionManager.stats.exhaustion_deaths++;
+            }
             idMap.delete(a.intId);
             return false;
         }
@@ -235,8 +239,8 @@ function runLoop() {
         if (p.life <= 0) particles.splice(i, 1);
     }
 
-    // Data-Oriented Array Packing
-    const agentBuffer = new Float32Array(agents.length * 8);
+    // Data-Oriented Array Packing (10 floats per agent)
+    const agentBuffer = new Float32Array(agents.length * 10);
     let offset = 0;
     let males = 0, females = 0, intro = 0, extro = 0, incest = 0;
     let tribeRed = 0, tribeBlue = 0, infectedCount = 0;
@@ -262,6 +266,8 @@ function runLoop() {
         if (a.isInfected) infectedCount++;
         agentBuffer[offset++] = a.isInfected ? 1 : 0;
         agentBuffer[offset++] = CONFIG.ENABLE_HUNGER ? a.hunger / CONFIG.MAX_HUNGER : 1; // hunger ratio
+        agentBuffer[offset++] = CONFIG.ENABLE_COMBAT_WEARINESS ? a.weariness / CONFIG.WEARINESS_MAX : 0; // weariness ratio
+        agentBuffer[offset++] = a.isBerserk ? 1 : 0; // 10th float: Manic flag
 
         if (a.gender === GENDER.MALE) males++; else females++;
         if (a.personality === PERSONALITY.INTROVERT) intro++; else extro++;
@@ -328,6 +334,7 @@ function runLoop() {
                 prefMinStrength: 'N/A',
                 prefMinIntelligence: 'N/A',
                 prefPersonality: 'N/A',
+                weariness: 'N/A',
             };
         } else {
             selectedAgentData = {
@@ -347,6 +354,8 @@ function runLoop() {
                 prefMinStrength: a.prefMinStrength,
                 prefMinIntelligence: a.prefMinIntelligence,
                 prefPersonality: a.prefPersonality,
+                weariness: Math.round(a.weariness),
+                isBerserk: a.isBerserk,
             };
         }
     } else if (selectedAgentId) {
@@ -363,6 +372,8 @@ function runLoop() {
             born: interactionManager.stats.offspring_born,
             incest_born: interactionManager.stats.incest_born,
             natural_deaths: interactionManager.stats.natural_deaths,
+            exhaustion_deaths: interactionManager.stats.exhaustion_deaths,
+            peak_pop: interactionManager.peakPop,
             monster_births: interactionManager.stats.monster_births,
             monster_fights: interactionManager.stats.monster_fights,
             monster_deaths: interactionManager.stats.monster_deaths
@@ -381,6 +392,7 @@ function runLoop() {
             strongestStr: strongest ? strongest.str : 0
         },
         events: [...interactionManager.events, ...godEvents],
+        milestones: interactionManager.milestones,
         selectedAgent: selectedAgentData,
         agentBuffer: agentBuffer.buffer,
         particleBuffer: particleBuffer.buffer,

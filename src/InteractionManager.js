@@ -13,11 +13,32 @@ export class InteractionManager {
             offspring_born: 0,
             incest_born: 0,
             natural_deaths: 0,
+            exhaustion_deaths: 0,
             monster_births: 0,
             monster_fights: 0,
             monster_deaths: 0
         };
         this.events = [];
+        this.milestones = [];
+        this.recordedEras = {
+            FIRST_BLOOD: false,
+            FIRST_BIRTH: false,
+            FIRST_MONSTER: false,
+            PLAGUE_OUTBREAK: false,
+            BERSERKER_CRISIS: false,
+            GENDER_SCARCITY: false,
+            THE_VOID: false // Total extinction
+        };
+        this.peakPop = 0;
+        this.lastSnapPop = 0;
+        this.popHistoryThresholds = [100, 200, 300, 400, 500]; // Multiples to track
+    }
+
+    recordMilestone(tick, msg, type = 'info') {
+        const year = Math.floor(tick / CONFIG.TICKS_PER_YEAR);
+        if (this.milestones.length < 50) {
+            this.milestones.push({ year, msg, type });
+        }
     }
 
     /**
@@ -94,8 +115,11 @@ export class InteractionManager {
 
         let fightChance;
         if (isInterTribe) {
-            // Huge chance of war when meeting an enemy tribe member
-            fightChance = clamp(avgFighter / 100 + 0.5, 0.5, 0.95);
+            // Fix #4: Inter-tribe fight chance scales with desperation.
+            // Desperate tribes (pop < 12) are frightened, not aggressive — lower fight chance.
+            const desperationPenalty = (a.isDesperate || b.isDesperate) ? 0.3 : 0;
+            // Base chance: 30% floor (was 50%), scales up with fighter trait
+            fightChance = clamp(avgFighter / 100 + 0.3 - desperationPenalty, 0.15, 0.85);
         } else {
             // Diplomacy: High intelligence can de-escalate inner-tribe conflict
             const avgIntelligence = (a.intelligence + b.intelligence) / 2;
@@ -109,6 +133,11 @@ export class InteractionManager {
             fightChance = clamp((avgFighter - 40) / 100, 0.05, 0.4);
         }
 
+        // Manics/Berserkers always fight anyone they touch, overrides everything!
+        if (a.isBerserk || b.isBerserk) {
+            fightChance = 1.0;
+        }
+
         if (Math.random() > fightChance) {
             this.pushApart(a, b, 0.5);
             return;
@@ -117,8 +146,12 @@ export class InteractionManager {
         // Fight happens
         this.stats.kills++;
 
-        const scoreA = a.strength + a.intelligence * 0.5 + a.fighter * 0.3;
-        const scoreB = b.strength + b.intelligence * 0.5 + b.fighter * 0.3;
+        // Weariness reduces combat effectiveness (up to -50% at max weariness)
+        const wearinessPenaltyA = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (a.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
+        const wearinessPenaltyB = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (b.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
+
+        const scoreA = (a.strength + a.intelligence * 0.5 + a.fighter * 0.3) * wearinessPenaltyA;
+        const scoreB = (b.strength + b.intelligence * 0.5 + b.fighter * 0.3) * wearinessPenaltyB;
         const probA = scoreA / (scoreA + scoreB);
 
         let winner, loser;
@@ -131,9 +164,18 @@ export class InteractionManager {
         }
 
         loser.markedForDeath = true;
+        loser.deathReason = 'murder';
         this.spawnDeathParticles(loser.x, loser.y, particlesArray);
+
+        if (!this.recordedEras.FIRST_BLOOD) {
+            this.recordedEras.FIRST_BLOOD = true;
+            this.recordMilestone(worldTick, `The first life was taken: ${winner.name} killed ${loser.name}. The Age of Conflict has begun.`, 'danger');
+        }
         winner.vx *= -1;
         winner.vy *= -1;
+
+        // Winner gains weariness from the fight (age-dependent)
+        winner.addKillWeariness(worldTick);
 
         if (isInterTribe || winner.strength > 90) {
             this.events.push({
@@ -231,6 +273,11 @@ export class InteractionManager {
             this.stats.offspring_born++;
             parentA.offspringCount++;
             parentB.offspringCount++;
+
+            if (!this.recordedEras.FIRST_BIRTH) {
+                this.recordedEras.FIRST_BIRTH = true;
+                this.recordMilestone(worldTick, `The first child, ${parentA.tribe === parentB.tribe ? 'a pure-bred' : 'a hybrid-born'}, was welcomed into the world.`, 'success');
+            }
 
             let isIncest = false;
             // Both agents may have empty parent array if they are origin agents, which is fine
@@ -492,14 +539,20 @@ export class InteractionManager {
 
             a.steer(nearbyAwareness, foodsArray, nearbyMonsters);
 
-            // Food consumption
+            // Food consumption — Fix #3: Larger eat radius + proximity slowdown
             if (CONFIG.ENABLE_HUNGER) {
                 for (let j = 0; j < foodsArray.length; j++) {
                     const f = foodsArray[j];
                     if (f.consumed) continue;
-                    if (distance(a, f) < a.radius + 5) {
+                    const foodDist = distance(a, f);
+                    // Increased eat radius from radius+5 to radius+15 to prevent flyover
+                    if (foodDist < a.radius + 15) {
                         a.hunger = Math.min(CONFIG.MAX_HUNGER, a.hunger + CONFIG.FOOD_NUTRITION);
                         f.consumed = true;
+                    } else if (foodDist < a.radius + 40 && a.hunger < CONFIG.MAX_HUNGER * 0.5) {
+                        // Proximity slowdown: hungry agents brake when near food to avoid overshooting
+                        a.vx *= 0.85;
+                        a.vy *= 0.85;
                     }
                 }
             }
@@ -535,8 +588,13 @@ export class InteractionManager {
                         this.resolveConflict(a, b, particlesArray, worldTick, true);
                     }
                 } else if (!isOppositeGender) {
-                    // Same tribe, same gender -> inner-tribe conflict dispute
-                    this.resolveConflict(a, b, particlesArray, worldTick, false);
+                    // Fix #5: Same tribe, same gender — only attempt scuffle if at least one is aggressive.
+                    // Peaceful tribemates (both fighter <= 50) just push apart, preventing silent population bleed.
+                    if (a.fighter > 50 || b.fighter > 50) {
+                        this.resolveConflict(a, b, particlesArray, worldTick, false);
+                    } else {
+                        this.pushApart(a, b, 0.3);
+                    }
                 } else {
                     // Same tribe, opposite gender -> reproduce
                     this.resolveReproduction(a, b, agentsArray, particlesArray, worldTick);
@@ -556,6 +614,10 @@ export class InteractionManager {
 
                 const dist = distance(agent, monster);
                 if (dist < agent.radius + monster.radius) {
+                    if (!this.recordedEras.FIRST_MONSTER) {
+                        this.recordedEras.FIRST_MONSTER = true;
+                        this.recordMilestone(worldTick, `Humanity has met its match. The first Monster was spotted near ${agent.name}. The Age of Terror begins.`, 'warning');
+                    }
 
                     // Rare Mating Check
                     const isAdultFemale = agent.gender === 'Female' && agent.canReproduce(worldTick);
@@ -600,6 +662,10 @@ export class InteractionManager {
                     if (Math.random() < survivalChance) {
                         // Agent survives the clash!
                         this.pushApart(agent, monster, 5.0); // Massive knockback
+                        agent.addKillWeariness(worldTick);   // Fighting a monster is exhausting!
+
+                        // Update stats
+                        this.stats.monster_fights = (this.stats.monster_fights || 0) + 1;
 
                         // Small chance to broadcast non-lethal heroic strike
                         if (Math.random() < 0.1) {
@@ -660,6 +726,55 @@ export class InteractionManager {
         }
     }
 
+    checkGlobalMilestones(agents, worldTick) {
+        if (agents.length === 0) {
+            if (!this.recordedEras.THE_VOID && worldTick > 500) {
+                this.recordedEras.THE_VOID = true;
+                this.recordMilestone(worldTick, `The Silence: Humanity has vanished from the world. A final ending.`, 'info');
+            }
+            return;
+        }
+
+        // Berserker check
+        const berserkCount = agents.filter(a => a.isBerserk).length;
+        if (!this.recordedEras.BERSERKER_CRISIS && berserkCount > 5) {
+            this.recordedEras.BERSERKER_CRISIS = true;
+            this.recordMilestone(worldTick, `The Berserker Crisis: Overcrowding has driven many into a bloodthirsty rage. Chaos reigns.`, 'danger');
+        }
+
+        // Gender scarcity check
+        const males = agents.filter(a => a.gender === 'Male' && !a.isElder(worldTick)).length;
+        const females = agents.filter(a => a.gender === 'Female' && !a.isElder(worldTick)).length;
+        if (!this.recordedEras.GENDER_SCARCITY && (males < 3 || females < 3) && agents.length > 20) {
+            this.recordedEras.GENDER_SCARCITY = true;
+            const scarce = males < 3 ? 'reproduction-capable males' : 'reproduction-capable females';
+            this.recordMilestone(worldTick, `Extinction looms: The population is almost devoid of ${scarce}. Repopulation is nearly impossible.`, 'warning');
+        }
+
+        // Population Dynamics Check (Every 500 ticks)
+        if (worldTick % 500 === 0) {
+            const currentPop = agents.length;
+
+            // Peak check
+            if (currentPop > this.peakPop) {
+                this.peakPop = currentPop;
+                // If we cross a threshold (100, 200, 300)
+                if (this.popHistoryThresholds.length > 0 && currentPop >= this.popHistoryThresholds[0]) {
+                    const threshold = this.popHistoryThresholds.shift();
+                    this.recordMilestone(worldTick, `Population Milestone: The civilization has reached ${threshold} souls. A Golden Age is unfolding.`, 'success');
+                }
+            }
+
+            // Crash check (The Great Dip) check relative to last snapshot
+            if (this.lastSnapPop > 100 && currentPop < this.lastSnapPop * 0.6) {
+                // Drop > 40%
+                this.recordMilestone(worldTick, `A Great Famine (or War) has devastated the population. Numbers have plummeted by ${Math.floor((1 - currentPop / this.lastSnapPop) * 100)}% in just over a decade.`, 'danger');
+            }
+
+            this.lastSnapPop = currentPop;
+        }
+    }
+
     reset() {
         this.stats = {
             encounters: 0,
@@ -668,6 +783,7 @@ export class InteractionManager {
             offspring_born: 0,
             incest_born: 0,
             natural_deaths: 0,
+            exhaustion_deaths: 0,
             monster_births: 0,
             monster_fights: 0,
             monster_deaths: 0

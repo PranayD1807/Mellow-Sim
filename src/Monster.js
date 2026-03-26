@@ -27,8 +27,6 @@ export class Monster extends Entity {
         this.hunger = CONFIG.MAX_HUNGER; // Identical hunger capacity to humans
         this.targetAgentId = null; // Prevent target oscillation
 
-        this.targetAgentId = null; // Prevent target oscillation
-
         // How far they can see agents
         this.awarenessRadius = CONFIG.MONSTER_AWARENESS;
     }

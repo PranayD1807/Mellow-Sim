@@ -59,7 +59,7 @@ export class SimulationEngine {
             const aBuffer = new Float32Array(this.latestAgentBuffer);
 
             let clickedId = null;
-            for (let i = 0; i < aBuffer.length; i += 8) {
+            for (let i = 0; i < aBuffer.length; i += 10) {
                 const id = aBuffer[i];
                 const x = aBuffer[i + 1];
                 const y = aBuffer[i + 2];
@@ -141,6 +141,7 @@ export class SimulationEngine {
                 ENABLE_MAX_POPULATION: document.getElementById('cfg-limit-pop').checked,
                 MAX_POPULATION: parseInt(document.getElementById('cfg-max-pop').value) || 300,
                 MUTATION_RATE: parseFloat(document.getElementById('cfg-mutation').value) || 0.15,
+                ENABLE_COMBAT_WEARINESS: document.getElementById('cfg-weariness').checked,
                 ENABLE_MONSTERS: document.getElementById('cfg-monsters').checked,
                 INITIAL_MONSTERS: parseInt(document.getElementById('cfg-init-monsters').value) || 2,
 
@@ -241,6 +242,7 @@ export class SimulationEngine {
         document.getElementById('cfg-max-age').addEventListener('change', e => updateConfig('MAX_AGE', parseInt(e.target.value)));
         document.getElementById('cfg-ticks-yr').addEventListener('change', e => updateConfig('TICKS_PER_YEAR', parseInt(e.target.value)));
         document.getElementById('cfg-speed').addEventListener('change', e => updateConfig('MAX_SPEED', parseFloat(e.target.value)));
+        document.getElementById('cfg-weariness').addEventListener('change', e => updateConfig('ENABLE_COMBAT_WEARINESS', e.target.checked));
 
         // New Settings real-time bindings
         document.getElementById('cfg-max-hunger').addEventListener('change', e => updateConfig('MAX_HUNGER', parseInt(e.target.value)));
@@ -302,6 +304,7 @@ export class SimulationEngine {
         document.getElementById('stat-born').innerText = data.stats.born;
         document.getElementById('stat-incest-total').innerText = data.stats.incest_born;
         document.getElementById('stat-natural-deaths').innerText = data.stats.natural_deaths;
+        document.getElementById('stat-exhaustion-deaths').innerText = data.stats.exhaustion_deaths || 0;
 
         // World clock
         const worldYear = Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR);
@@ -314,7 +317,7 @@ export class SimulationEngine {
 
         const aBuffer = new Float32Array(data.agentBuffer);
 
-        for (let i = 0; i < aBuffer.length; i += 8) {
+        for (let i = 0; i < aBuffer.length; i += 10) {
             const id = aBuffer[i];
             const x = aBuffer[i + 1];
             const y = aBuffer[i + 2];
@@ -322,6 +325,7 @@ export class SimulationEngine {
             const isFemale = aBuffer[i + 4] === 1;
             const tInt = aBuffer[i + 5];
             const isInfected = aBuffer[i + 6] === 1;
+            const isBerserk = aBuffer[i + 9] === 1;
 
             let color = '#ef4444'; // Red default
             if (tInt === 1) color = '#3b82f6';
@@ -329,11 +333,20 @@ export class SimulationEngine {
             const h = s / 2;
 
             this.ctx.save();
-            this.ctx.shadowBlur = isInfected ? 20 : 10;
-            this.ctx.shadowColor = isInfected ? '#84cc16' : color;
-            this.ctx.fillStyle = color;
+            
+            // Render Bloom/Glow
+            if (isBerserk) {
+                const pulse = 10 + Math.sin(Date.now() / 150) * 15;
+                this.ctx.shadowBlur = pulse;
+                this.ctx.shadowColor = '#9333ea'; // Purple-600 (Vibrant Purple)
+                this.ctx.fillStyle = '#581c87'; // Purple-900 (Deep/Dark Purple)
+            } else {
+                this.ctx.shadowBlur = isInfected ? 20 : 10;
+                this.ctx.shadowColor = isInfected ? '#84cc16' : color;
+                this.ctx.fillStyle = color;
+            }
 
-            if (isInfected) {
+            if (isInfected && !isBerserk) {
                 // Pulse effect or sick color overwrite
                 this.ctx.globalAlpha = 0.8;
                 this.ctx.fillStyle = '#84cc16';
@@ -379,9 +392,22 @@ export class SimulationEngine {
                 this.ctx.stroke();
             }
 
+            // Draw weariness indicator (orange arc, only visible when > 20%)
+            if (CONFIG.ENABLE_COMBAT_WEARINESS) {
+                const wearinessRatio = Math.max(0, Math.min(1, aBuffer[i + 8]));
+                if (wearinessRatio > 0.2) {
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, h + 8, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * wearinessRatio));
+                    const orangeAlpha = 0.3 + wearinessRatio * 0.7; // Fades in as weariness increases
+                    this.ctx.strokeStyle = `rgba(251, 146, 60, ${orangeAlpha})`; // orange-400
+                    this.ctx.lineWidth = 1.5;
+                    this.ctx.stroke();
+                }
+            }
+
             if (this.selectedAgentId !== null && this.selectedAgentId === id) {
                 this.ctx.beginPath();
-                this.ctx.arc(x, y, h + 8, 0, Math.PI * 2);
+                this.ctx.arc(x, y, h + 11, 0, Math.PI * 2);
                 this.ctx.strokeStyle = '#fbbf24';
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
@@ -565,7 +591,18 @@ export class SimulationEngine {
         document.getElementById('ent-personality').style.color = a.personality === 'Bloodthirsty' ? '#ef4444' : (a.personality === 'Introvert' ? '#818cf8' : '#34d399');
         document.getElementById('ent-libido').innerText = a.libido;
         document.getElementById('ent-fighter').innerText = a.fighter;
+        document.getElementById('ent-weariness').innerText = a.weariness !== undefined ? a.weariness : 0;
         document.getElementById('ent-charm').innerText = a.charm;
+
+        // Berserk Status
+        const statusEl = document.getElementById('ent-status');
+        if (a.isBerserk) {
+            statusEl.innerText = "BERSERK (RAGE)";
+            statusEl.style.color = "#a855f7"; // purple-500
+        } else {
+            statusEl.innerText = "Stable";
+            statusEl.style.color = "#10b981";
+        }
 
         // Partner Preferences
         document.getElementById('ent-pref-str').innerText = a.prefMinStrength;
@@ -600,6 +637,7 @@ export class SimulationEngine {
         const worldYear = Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR);
         document.getElementById('go-years').innerText = worldYear;
         document.getElementById('go-pop').innerText = data.demographics.pop;
+        document.getElementById('go-peak').innerText = data.stats.peak_pop || 0;
 
         document.getElementById('go-encounters').innerText = data.stats.encounters;
         document.getElementById('go-kills').innerText = data.stats.kills;
@@ -628,6 +666,24 @@ export class SimulationEngine {
             document.getElementById('go-strongest').innerText = `${data.analytics.strongestName} (${data.analytics.strongestStr} STR)`;
         } else {
             document.getElementById('go-strongest').innerText = 'None';
+        }
+
+        // Render History Track
+        const track = document.getElementById('go-history-track');
+        track.innerHTML = '';
+        if (data.milestones && data.milestones.length > 0) {
+            data.milestones.forEach(m => {
+                const row = document.createElement('div');
+                let color = '#d1d5db'; // default info
+                if (m.type === 'danger') color = '#ef4444';
+                if (m.type === 'warning') color = '#fbbf24';
+                if (m.type === 'success') color = '#10b981';
+
+                row.innerHTML = `<span style="color: var(--text-muted); font-weight: 700;">Year ${m.year}:</span> <span style="color: ${color};">${m.msg}</span>`;
+                track.appendChild(row);
+            });
+        } else {
+            track.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-style: italic;">No notable history recorded.</div>';
         }
 
         document.getElementById('game-over-modal').classList.remove('hidden');

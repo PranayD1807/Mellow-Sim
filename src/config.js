@@ -36,6 +36,20 @@ export const CONFIG = {
     ENABLE_TRIBES: true,
     ENABLE_SHOW_AWARENESS: true,
     ENABLE_SHOW_INTERACTION: false,
+    ENABLE_COMBAT_WEARINESS: true,
+
+    // Combat Weariness
+    WEARINESS_MAX: 100,
+    WEARINESS_KILL_BASE: 12,        // Base weariness gained per kill
+    WEARINESS_TEEN_MULT: 0.4,       // Teens gain 40% of base (resilient)
+    WEARINESS_ADULT_MULT: 1.0,      // Adults gain 100%
+    WEARINESS_ELDER_MULT: 2.0,      // Elders gain 200% (fragile)
+    WEARINESS_RECOVERY_TEEN: 0.08,  // Recovery per tick (teens bounce back fast)
+    WEARINESS_RECOVERY_ADULT: 0.04, // Adults recover at moderate pace
+    WEARINESS_RECOVERY_ELDER: 0.015,// Elders recover very slowly
+    WEARINESS_FED_BONUS: 1.5,       // Recovery multiplier when well-fed (hunger > 70%)
+    WEARINESS_DEATH_THRESHOLD: 90,  // Above this, small chance of dying from exhaustion
+    WEARINESS_DEATH_CHANCE: 0.003,  // Per-tick death chance when above threshold
 
     // Steering
     STEER_STRENGTH: 0.04,
