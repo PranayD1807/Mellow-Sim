@@ -385,17 +385,19 @@ export class Agent extends Entity {
 
                 // --- Berserk Check (Psychosis due to overcrowding) ---
                 if (neighborCount > 20 && !this.isBerserk) {
-                    this.stressLevel += 0.5;
+                    // Mental Resilience: High intelligence suppresses social stress gain
+                    const stressGain = Math.max(0.15, (1.25 - (this.intelligence / 100)) * 0.85);
+                    this.stressLevel += stressGain;
                     if (this.stressLevel > 150) {
                         this.isBerserk = true;
                         this.berserkTicks = randInt(1200, 2400); // 1-2 years of rage
-                        this.fighter = clamp(this.fighter + 50, 0, 100);
-                        this.strength = clamp(this.strength + 20, 0, 100);
+                        this.fighter = 100; // Absolute aggression
+                        this.strength = clamp(this.strength + 30, 0, 100);
                         this.personality = PERSONALITY.INTROVERT; // Stop seeking friends
                     }
                 } else if (!this.isBerserk) {
                     // Gradual recovery when not overcrowded
-                    this.stressLevel = Math.max(0, this.stressLevel - 0.4);
+                    this.stressLevel = Math.max(0, this.stressLevel - 1.0); // Faster recovery
                 }
             }
         }
@@ -403,15 +405,17 @@ export class Agent extends Entity {
         this.vx += steerX;
         this.vy += steerY;
 
+        const maxSpeed = this.isBerserk ? CONFIG.MAX_SPEED * 2.5 : CONFIG.MAX_SPEED;
+
         const speed = Math.hypot(this.vx, this.vy);
-        if (speed > CONFIG.MAX_SPEED) {
-            this.vx = (this.vx / speed) * CONFIG.MAX_SPEED;
-            this.vy = (this.vy / speed) * CONFIG.MAX_SPEED;
+        if (speed > maxSpeed) {
+            this.vx = (this.vx / speed) * maxSpeed;
+            this.vy = (this.vy / speed) * maxSpeed;
         }
         if (speed < 0.1) {
             const angle = rand(0, Math.PI * 2);
-            this.vx = Math.cos(angle) * 0.15;
-            this.vy = Math.sin(angle) * 0.15;
+            this.vx = Math.cos(angle) * (this.isBerserk ? 0.8 : 0.15);
+            this.vy = Math.sin(angle) * (this.isBerserk ? 0.8 : 0.15);
         }
     }
 

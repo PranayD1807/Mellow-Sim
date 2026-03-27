@@ -77,22 +77,25 @@ The simulation has an emergency failsafe to prevent total civilization collapse 
 - **Heroic Survival:** Only the most elite agents (high Strength + high Intelligence) have a chance to survive a hit. This survival chance is **reduced by 15% for every additional monster** touching the agent (The Swarm) and up to **50% by combat weariness**.
 - **Territorial Disputes:** Monsters are highly territorial. If two monsters cross paths, they will engage in a brutal Titan clash, dealing massive damage to one another until one or both are dead.
 
-## 8. The Berserker Mechanic (Overcrowding Madness)
-Civilizations that become too successful often fall from within.
-- **Stress Accumulation:** When an agent is surrounded by more than 20 neighbors, they begin accumulating **Stress** (+0.5 per tick).
+## 8. The Berserker Mechanic (Overcrowding & Stability)
+Civilizations that become too successful often fall from within through a psychosis triggered by overcrowding.
+- **Stress Accumulation:** When an agent is surrounded by more than 20 neighbors, they begin accumulating **Stress**.
+- **Mental Resilience (Intelligence Link):** Intelligence acts as a social stabilizer. **Low-intelligence agents** suffer a breakdown up to **5x faster** than geniuses. A high-intelligence agent suppresses stress gain, while a low-intelligence agent gains up to +1.0 stress per tick.
 - **The Snap:** If Stress exceeds 150 points, the agent goes **Berserk**.
-- **Behavior:** Berserkers turn **Deep Purple** and enter a state of pure rage for 1-2 years. They ignore all tribal and gender rules, treating every living thing (including their own family and tribe) as a combat target with a **100% fight chance**.
-- **Stats:** Berserker rage grants +50 to Fighter and +20 to Strength, making them incredibly dangerous.
-- **Recovery:** If an agent leaves the crowd, they recover Stress at a rate of -0.4 per tick. Sanity is found in solitude.
+- **Catastrophic Buffs:** To ensure the state is a civilization-level threat, Berserkers receive massive technical overrides:
+  - **2.5x Max Speed:** They become perfect hunters that cannot be outrun.
+  - **1.5x interaction Radius:** Their "Attack Range" increases, making it harder to dodge them.
+  - **5x Combat Power Multiplier:** They near-guaranteed kill any sane agent they touch.
+  - **Weariness Immunity:** They never tire or exhaust during their rage.
+- **Behavior:** Berserkers turn **Deep Purple** and ignore all tribal and gender rules, treating every living thing (including family) as a combat target with a **100% fight chance**.
+- **Recovery:** If an agent leaves the crowd, they recover Stress at a rate of -1.0 per tick.
 
-## 9. Civilization History Track
-The simulation is no longer just a series of dots—it is a story.
-- **Milestones:** Significant events are recorded in a chronological "History Track" displayed at Game Over.
-- **Tracked Events:**
-  - **The Firsts:** first birth, first inter-tribe murder, first monster encounter.
-  - **Crises:** The Great Plague (>10% infected), The Berserker Crisis (>5 active berserkers), Extinction Risk (gender scarcity).
-  - **Demographic Reports:** Every 10 years, the simulation logs the current average Strength and Intelligence of the entire human race.
-  - **Boom & Bust:** Population milestones (100, 200, 300...) and "Great Dips" (population drops of >40% in a 5-year window).
+## 9. Civilization History & Evolution Graph
+The simulation is no longer just a series of dots—it is a story with a visual lineage.
+- **Milestones:** Significant events (First Blood, Plagues, Crashes) are recorded in a chronological "History Track".
+- **Demographic Evolution Graph:** Every **5 years** (300 ticks), the simulation logs the current average Strength and Intelligence. Upon simulation end, these are rendered into a visual **Trend Chart**.
+- **Genesis Snapshot:** A "Year 0" record is always preserved to ensure the graph shows the full evolutionary journey of the first settlers.
+- **All-Time Records:** The archive preserves the strongest and most prolific heroes globally, ensuring their legacy persists even after total extinction.
 
 ## 10. Memory and Architecture
 The engine uses a custom **Data-Oriented Web Worker** architecture. 

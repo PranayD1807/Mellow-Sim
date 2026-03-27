@@ -80,11 +80,15 @@ Encounters with Monsters are typically fatal, but elite agents can survive if th
 ## 6. The Berserker State (Psychosis)
 A social-pressure triggered mental breakdown that turns agents into tribal outcasts.
 *   **Trigger:** Accumulating **150 Stress** points from being in a crowd (>20 neighbors).
+*   **Mental Resilience:** High Intelligence suppresses stress; **low-intelligence agents** accumulate stress up to **5x faster** than geniuses.
 *   **Visuals:** Agent turns **Deep Purple** with a pulsing glow.
 *   **Hostility:** Both `fighter` and `Libido` rules are bypassed. The agent has a **100% fight chance** against every neighbor regardless of tribe or gender.
-*   **Bonus Stats:** +50 Fighter, +20 Strength.
+*   **Bonus Stats:** +30 Strength, **100 Fighter**, and a **2.5x Speed Multiplier**.
+*   **Lethality:** Berserkers have a **1.5x Interaction Radius** (Attack Range) and a **5x Power Multiplier** against sane agents.
+*   **Rage Immunity:** Berserkers are **immune to weariness** and exhaustion during their state.
 *   **Duration:** 1200–2400 ticks (1-2 simulation years).
-*   **Cool-down:** Stress recovers by 0.4 per tick when the agent is away from crowds.
+*   **Cool-down:** Stress recovers slowly when away from crowds.
+
 
 ### 7. Global Failsafes & History
 *   **Extinction Prevention:** If a gender is critically scarce, "Romeo & Juliet" cross-tribe mating is forced with 100% success.

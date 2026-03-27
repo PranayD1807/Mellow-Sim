@@ -159,8 +159,13 @@ export class InteractionManager {
         const wearinessPenaltyA = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (a.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
         const wearinessPenaltyB = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (b.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
 
-        const scoreA = (a.strength + a.intelligence * 0.5 + a.fighter * 0.3) * wearinessPenaltyA;
-        const scoreB = (b.strength + b.intelligence * 0.5 + b.fighter * 0.3) * wearinessPenaltyB;
+        let scoreA = (a.strength + a.intelligence * 0.5 + a.fighter * 0.3) * wearinessPenaltyA;
+        let scoreB = (b.strength + b.intelligence * 0.5 + b.fighter * 0.3) * wearinessPenaltyB;
+
+        // Berserker Advantage: Pure Rage is terrifyingly lethal
+        if (a.isBerserk && !b.isBerserk) scoreA *= 5;
+        if (b.isBerserk && !a.isBerserk) scoreB *= 5;
+
         const probA = scoreA / (scoreA + scoreB);
 
         let winner, loser;
@@ -528,7 +533,8 @@ export class InteractionManager {
                             }
                             // To avoid double-resolving interactions, we enforce a strict ID check
                             // We only process interaction if a.id < b.id (similar to j = i + 1 check)
-                            if (dist < CONFIG.INTERACTION_RADIUS && a.id < b.id) {
+                            const interactionRange = (a.isBerserk || b.isBerserk) ? CONFIG.INTERACTION_RADIUS * 1.5 : CONFIG.INTERACTION_RADIUS;
+                            if (dist < interactionRange && a.id < b.id) {
                                 nearbyInteraction.push(b);
                             }
                         }

@@ -47,6 +47,17 @@ To provide narrative closure and evolutionary insights, the simulation tracks ma
 *   **Visual Rendering**: The `SimulationEngine` uses a custom Canvas plotting engine in the Game Over modal to render these snapshots into an interactive trend chart (Strength vs Intelligence).
 
 
+### 2.6. Stability & Psychosis Mechanism
+A core social feedback loop that prevents infinite population growth in dense areas:
+*   **Stress Accumulation**: Agents in crowded cells (>20 neighbors) accumulate mental Stress.
+*   **Mental Resilience**: The accumulation rate is inversely proportional to `intelligence`. High-intelligence agents suppress stress gain, while low-intelligence agents suffer up to 5x faster mental breakdown.
+*   **Berserker Trigger**: At 150 Stress points, an agent enters a catastrophic "Berserker" state.
+*   **Predatory Scaling**: To act as a civilization-wide threat, Berserkers receive technical overrides:
+    *   **2.5x Max Speed** boost.
+    *   **1.5x Interaction Radius** (Attack Range).
+    *   **5x Combat Power Multiplier** against sane agents.
+    *   **Zero-Weariness** (Immune to combat exhaustion).
+
 ## 3. Performance & Data Stride
 The engine is optimized for high-population counts using Data-Oriented concepts:
 *   **Agent Buffer Stride**: Each agent is serialized into exactly **10 floats** in a `SharedArrayBuffer` (X, Y, Radius, Tribe, Gender, Infection, Hunger, Weariness, Berserk, ID).
