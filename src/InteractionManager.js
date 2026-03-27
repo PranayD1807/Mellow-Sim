@@ -765,10 +765,13 @@ export class InteractionManager {
         if (worldTick === 0 && agents.length > 0 && this.statHistory.length === 0) {
             const totalStr = agents.reduce((sum, a) => sum + a.strength, 0);
             const totalInt = agents.reduce((sum, a) => sum + a.intelligence, 0);
+            const totalSpd = agents.reduce((sum, a) => sum + (a.speed || 0), 0);
             this.statHistory.push({
                 year: 0,
                 avgStr: Math.round(totalStr / agents.length),
-                avgInt: Math.round(totalInt / agents.length)
+                avgInt: Math.round(totalInt / agents.length),
+                avgSpd: Math.round(totalSpd / agents.length),
+                pop: agents.length
             });
         }
 
@@ -794,6 +797,18 @@ export class InteractionManager {
             this.recordedEras.GENDER_SCARCITY = true;
             const scarce = males < 3 ? 'reproduction-capable males' : 'reproduction-capable females';
             this.recordMilestone(worldTick, `Extinction looms: The population is almost devoid of ${scarce}. Repopulation is nearly impossible.`, 'warning');
+        }
+
+        // 3a. Low Population / Recovery checks (on every tick for responsiveness)
+        const currentPopCheck = agents.length;
+        if (!this.recordedEras.LOW_POPULATION && currentPopCheck < 10 && currentPopCheck > 0) {
+            this.recordedEras.LOW_POPULATION = true;
+            this.recordedEras.POP_RECOVERY = false; // Reset so recovery can fire again if pop drops again
+            this.recordMilestone(worldTick, `Critical Threshold: The population has collapsed to only ${currentPopCheck} souls. Extinction is imminent.`, 'danger');
+        } else if (this.recordedEras.LOW_POPULATION && !this.recordedEras.POP_RECOVERY && currentPopCheck >= 20) {
+            this.recordedEras.POP_RECOVERY = true;
+            this.recordedEras.LOW_POPULATION = false; // Allow re-triggering if pop crashes again
+            this.recordMilestone(worldTick, `A Miracle: After facing near-extinction, the population has recovered to ${currentPopCheck}. Life finds a way.`, 'success');
         }
 
         // 3. Population Dynamics Check (Every 500 ticks)
@@ -830,13 +845,17 @@ export class InteractionManager {
         if (worldTick > 0 && worldTick % 300 === 0 && agents.length > 2) {
             const totalStr = agents.reduce((sum, a) => sum + a.strength, 0);
             const totalInt = agents.reduce((sum, a) => sum + a.intelligence, 0);
+            const totalSpd = agents.reduce((sum, a) => sum + (a.speed || 0), 0);
             const avgStr = Math.round(totalStr / agents.length);
             const avgInt = Math.round(totalInt / agents.length);
+            const avgSpd = Math.round(totalSpd / agents.length);
 
             this.statHistory.push({
                 year: (worldTick / CONFIG.TICKS_PER_YEAR).toFixed(1),
                 avgStr,
-                avgInt
+                avgInt,
+                avgSpd,
+                pop: agents.length
             });
         }
     }
@@ -863,7 +882,9 @@ export class InteractionManager {
             PLAGUE_OUTBREAK: false,
             BERSERKER_CRISIS: false,
             GENDER_SCARCITY: false,
-            THE_VOID: false
+            THE_VOID: false,
+            LOW_POPULATION: false,
+            POP_RECOVERY: false
         };
         this.peakPop = 0;
         this.lastSnapPop = 0;

@@ -654,7 +654,7 @@ export class SimulationEngine {
         setStat('go-avg-int', data.analytics.avgInt);
         setStat('go-avg-spd', data.analytics.avgSpd || '-');
 
-        setStat('go-monster-pop', data.demographics.monsters || 0);
+        setStat('go-monster-pop', data.demographics.monsterCount || 0);
         setStat('go-monster-deaths', data.stats.monster_deaths || 0);
         setStat('go-monster-fights', data.stats.monster_fights || 0);
         setStat('go-monster-births', data.stats.monster_births || 0);
@@ -693,7 +693,10 @@ export class SimulationEngine {
         document.getElementById('game-over-modal').classList.remove('hidden');
 
         // Render demographic chart after a tiny reflow delay
-        setTimeout(() => this.renderStatsChart(data.statHistory), 50);
+        setTimeout(() => {
+            this.renderStatsChart(data.statHistory);
+            this.renderPopChart(data.statHistory);
+        }, 50);
     }
 
     renderStatsChart(history) {
@@ -753,6 +756,10 @@ export class SimulationEngine {
             ctx.beginPath(); ctx.arc(x, getY(history[0].avgStr), 5, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#60a5fa'; // INT
             ctx.beginPath(); ctx.arc(x, getY(history[0].avgInt), 5, 0, Math.PI * 2); ctx.fill();
+            if (history[0].avgSpd !== undefined) {
+                ctx.fillStyle = '#fbbf24'; // SPD
+                ctx.beginPath(); ctx.arc(x, getY(history[0].avgSpd), 5, 0, Math.PI * 2); ctx.fill();
+            }
         } else {
             // Gradient Area Fills (Strength)
             const strGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
@@ -811,19 +818,169 @@ export class SimulationEngine {
                 if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             });
             ctx.stroke();
-        }
+
+            // Gradient Area Fill (Speed)
+            const spdData = history.filter(pt => pt.avgSpd !== undefined);
+            if (spdData.length > 0) {
+                const spdGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
+                spdGrad.addColorStop(0, 'rgba(251, 191, 36, 0.15)');
+                spdGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
+
+                const spdXStep = (w - padding * 2) / Math.max(1, spdData.length - 1);
+                ctx.beginPath();
+                ctx.fillStyle = spdGrad;
+                spdData.forEach((pt, i) => {
+                    const x = padding + i * spdXStep;
+                    const y = getY(pt.avgSpd);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.lineTo(padding + (spdData.length - 1) * spdXStep, h - padding);
+                ctx.lineTo(padding, h - padding);
+                ctx.closePath();
+                ctx.fill();
+
+                // Speed Line
+                ctx.beginPath();
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 3]);
+                ctx.lineJoin = 'round';
+                spdData.forEach((pt, i) => {
+                    const x = padding + i * spdXStep;
+                    const y = getY(pt.avgSpd);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+        } // end else (history.length > 1)
 
         // Legend
         ctx.textAlign = 'left';
         ctx.font = 'bold 10px Inter';
         ctx.fillStyle = '#f87171';
-        ctx.fillText('STRENGTH', padding, h - 5);
+        ctx.fillText('STR', padding, h - 5);
         ctx.fillStyle = '#60a5fa';
-        ctx.fillText('INTELLIGENCE', w / 2, h - 5);
+        ctx.fillText('INT', padding + 36, h - 5);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('⚡SPD', padding + 68, h - 5);
         ctx.fillStyle = 'rgba(255,255,255,0.4)';
         ctx.textAlign = 'right';
         const displayYear = history[history.length - 1].year;
         ctx.fillText(`YEAR ${displayYear}`, w - padding, h - 5);
+    }
+
+    renderPopChart(history) {
+        const canvas = document.getElementById('go-pop-chart');
+        if (!canvas) return;
+
+        if (!history || history.length === 0 || !history.some(h => h.pop !== undefined)) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.font = 'italic 12px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('No historical data recorded', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+
+        // Match resolution
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const padding = 25;
+
+        ctx.clearRect(0, 0, w, h);
+
+        const popData = history.filter(pt => pt.pop !== undefined);
+        const maxPop = Math.max(...popData.map(pt => pt.pop), 1);
+        const xStep = (w - padding * 2) / Math.max(1, popData.length - 1);
+        const getY = (val) => h - padding - (val / maxPop) * (h - padding * 2);
+
+        // Horizontal grid lines
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (h - padding * 2) * (i / 4);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(w - padding, y);
+            ctx.stroke();
+
+            // Y-axis labels
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.font = '9px Inter';
+            ctx.textAlign = 'right';
+            const labelVal = Math.round(maxPop * (1 - i / 4));
+            ctx.fillText(labelVal, padding - 3, y + 3);
+            ctx.setLineDash([5, 5]);
+        }
+        ctx.setLineDash([]);
+
+        if (popData.length === 1) {
+            ctx.fillStyle = '#34d399';
+            ctx.beginPath();
+            ctx.arc(padding, getY(popData[0].pop), 5, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            // Gradient area fill
+            const grad = ctx.createLinearGradient(0, padding, 0, h - padding);
+            grad.addColorStop(0, 'rgba(52, 211, 153, 0.35)');
+            grad.addColorStop(1, 'rgba(52, 211, 153, 0)');
+
+            ctx.beginPath();
+            ctx.fillStyle = grad;
+            popData.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.pop);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.lineTo(padding + (popData.length - 1) * xStep, h - padding);
+            ctx.lineTo(padding, h - padding);
+            ctx.closePath();
+            ctx.fill();
+
+            // Population line
+            ctx.beginPath();
+            ctx.strokeStyle = '#34d399';
+            ctx.lineWidth = 3;
+            ctx.lineJoin = 'round';
+            popData.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.pop);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Peak marker
+            const peakPt = popData.reduce((best, pt) => pt.pop > best.pop ? pt : best, popData[0]);
+            const peakIdx = popData.indexOf(peakPt);
+            const peakX = padding + peakIdx * xStep;
+            const peakY = getY(peakPt.pop);
+            ctx.beginPath();
+            ctx.arc(peakX, peakY, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#fbbf24';
+            ctx.fill();
+        }
+
+        // Legend
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 10px Inter';
+        ctx.fillStyle = '#34d399';
+        ctx.fillText('POPULATION', padding, h - 5);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillText('● PEAK', padding + 90, h - 5);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.textAlign = 'right';
+        const lastYear = popData[popData.length - 1].year;
+        ctx.fillText(`YEAR ${lastYear}`, w - padding, h - 5);
     }
 
     start() {
