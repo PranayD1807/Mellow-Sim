@@ -580,6 +580,7 @@ export class SimulationEngine {
 
         document.getElementById('ent-strength').innerText = a.strength;
         document.getElementById('ent-intelligence').innerText = a.intelligence;
+        document.getElementById('ent-speed').innerText = a.speed !== undefined && a.speed !== 'N/A' ? `${a.speed} / 100` : (a.speed || 'N/A');
         document.getElementById('ent-offspring').innerText = a.offspringCount;
 
         const incestEl = document.getElementById('ent-incest');
@@ -651,6 +652,7 @@ export class SimulationEngine {
 
         setStat('go-avg-str', data.analytics.avgStr);
         setStat('go-avg-int', data.analytics.avgInt);
+        setStat('go-avg-spd', data.analytics.avgSpd || '-');
 
         setStat('go-monster-pop', data.demographics.monsters || 0);
         setStat('go-monster-deaths', data.stats.monster_deaths || 0);

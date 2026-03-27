@@ -247,6 +247,7 @@ function runLoop() {
 
     let totalStr = 0;
     let totalInt = 0;
+    let totalSpd = 0;
     let mostProlific = null;
     let strongest = null;
 
@@ -275,6 +276,7 @@ function runLoop() {
 
         totalStr += a.strength;
         totalInt += a.intelligence;
+        totalSpd += a.speed;
         
         // Update All-Time Heroes in InteractionManager
         if (a.offspringCount > interactionManager.allTimeHeroes.prolific.val) {
@@ -289,6 +291,7 @@ function runLoop() {
     if (agents.length > 0) {
         interactionManager.lastStats.avgStr = Math.round(totalStr / agents.length);
         interactionManager.lastStats.avgInt = Math.round(totalInt / agents.length);
+        interactionManager.lastStats.avgSpd = Math.round(totalSpd / agents.length);
     }
 
     const particleBuffer = new Float32Array(particles.length * 4);
@@ -337,6 +340,7 @@ function runLoop() {
                 stage: 'Apex Predator',
                 strength: a.strength,
                 intelligence: a.intelligence,
+                speed: 'N/A',
                 offspringCount: 'N/A',
                 bornOfIncest: 'N/A',
                 personality: 'Bloodthirsty',
@@ -357,6 +361,7 @@ function runLoop() {
                 stage: a.getLifeStage(worldTick),
                 strength: a.strength,
                 intelligence: a.intelligence,
+                speed: Math.round(a.speed),
                 offspringCount: a.offspringCount,
                 bornOfIncest: a.bornOfIncest,
                 personality: a.personality,
@@ -398,6 +403,7 @@ function runLoop() {
         analytics: {
             avgStr: interactionManager.lastStats.avgStr || '-',
             avgInt: interactionManager.lastStats.avgInt || '-',
+            avgSpd: interactionManager.lastStats.avgSpd || '-',
             prolificName: interactionManager.allTimeHeroes.prolific.name,
             prolificCount: interactionManager.allTimeHeroes.prolific.val,
             strongestName: interactionManager.allTimeHeroes.strongest.name,

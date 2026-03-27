@@ -38,7 +38,8 @@ export class InteractionManager {
         };
         this.lastStats = {
             avgStr: 0,
-            avgInt: 0
+            avgInt: 0,
+            avgSpd: 0
         };
         this.statHistory = [];
     }
@@ -316,14 +317,17 @@ export class InteractionManager {
 
             let childStr = Math.floor((parentA.strength + parentB.strength) / 2 * (1 + mutationModifier + rand(-CONFIG.MUTATION_RATE, CONFIG.MUTATION_RATE)));
             let childInt = Math.floor((parentA.intelligence + parentB.intelligence) / 2 * (1 + mutationModifier + rand(-CONFIG.MUTATION_RATE, CONFIG.MUTATION_RATE)));
+            let childSpd = Math.floor((parentA.speed + parentB.speed) / 2 * (1 + mutationModifier + rand(-CONFIG.MUTATION_RATE, CONFIG.MUTATION_RATE)));
 
             // Romeo & Juliet Hidden Mechanic!
             if (isCrossTribe) {
                 childStr = clamp(childStr * 1.5, 90, 100);
                 childInt = clamp(childInt * 1.5, 90, 100);
+                childSpd = clamp(childSpd * 1.5, 90, 100);
             } else {
                 childStr = clamp(childStr, 1, 100);
                 childInt = clamp(childInt, 1, 100);
+                childSpd = clamp(childSpd, 1, 100);
             }
 
             let traitModifier = (isIncest && CONFIG.ENABLE_INCEST_PENALTY && !parentA.isDesperate && !parentB.isDesperate) ? -30 : 0; // Flat penalty to social traits
@@ -358,7 +362,8 @@ export class InteractionManager {
                 null,        // no forced age, starts at 0
                 [parentA.id, parentB.id], // track parents
                 isIncest,    // born of incest flag
-                childTribe
+                childTribe,
+                childSpd     // inherited speed
             );
             agentsArray.push(child);
             this.spawnBirthParticles(child.x, child.y, particlesArray);

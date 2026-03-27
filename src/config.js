@@ -12,6 +12,8 @@ export const CONFIG = {
     INTERACTION_RADIUS: 25,
     AWARENESS_RADIUS: 200,
     MAX_SPEED: 0.5,
+    MIN_SPEED_STAT: 10,         // Min value for the per-agent speed attribute (1-100 scale)
+    MAX_SPEED_STAT: 100,        // Max value for the per-agent speed attribute (1-100 scale)
     REPRODUCTION_COOLDOWN: 100, // Recover faster after having a child
     MUTATION_RATE: 0.15,
     MAX_POPULATION: 300,

@@ -12,8 +12,9 @@ export class Agent extends Entity {
      * @param {object|null} traits - personality traits object
      * @param {number} birthTick - world tick this agent was born on
      * @param {number|null} forcedAge - for initial agents, force a starting age (in years)
+     * @param {number|null} speed - movement speed attribute (1-100 scale)
      */
-    constructor(x, y, gender = null, strength = null, intelligence = null, traits = null, birthTick = 0, forcedAge = null, parents = [], bornOfIncest = false, tribe = null) {
+    constructor(x, y, gender = null, strength = null, intelligence = null, traits = null, birthTick = 0, forcedAge = null, parents = [], bornOfIncest = false, tribe = null, speed = null) {
         super(x, y);
         this.id = generateId();
         this.parents = parents;
@@ -26,6 +27,7 @@ export class Agent extends Entity {
         this.name = generateName(this.gender);
         this.strength = strength || randInt(1, 100);
         this.intelligence = intelligence || randInt(1, 100);
+        this.speed = speed || randInt(CONFIG.MIN_SPEED_STAT, CONFIG.MAX_SPEED_STAT);
 
         // Age tracking
         this.birthTick = birthTick;
@@ -84,6 +86,14 @@ export class Agent extends Entity {
      */
     get dynamicAwarenessRadius() {
         return CONFIG.AWARENESS_RADIUS * (1 + (this.intelligence / 200));
+    }
+
+    /**
+     * Speed attribute acts as a multiplier on MAX_SPEED.
+     * speed=50 is the neutral baseline (1x). speed=100 is 2x. speed=10 is 0.2x.
+     */
+    get dynamicMaxSpeed() {
+        return CONFIG.MAX_SPEED * (this.speed / 50);
     }
 
     /**
@@ -405,7 +415,7 @@ export class Agent extends Entity {
         this.vx += steerX;
         this.vy += steerY;
 
-        const maxSpeed = this.isBerserk ? CONFIG.MAX_SPEED * 2.5 : CONFIG.MAX_SPEED;
+        const maxSpeed = this.isBerserk ? this.dynamicMaxSpeed * 2.5 : this.dynamicMaxSpeed;
 
         const speed = Math.hypot(this.vx, this.vy);
         if (speed > maxSpeed) {
