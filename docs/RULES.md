@@ -9,6 +9,7 @@ The **Sim Simulator** is a lightweight, cross-platform simulation game that oper
 *   **Gender**: Either Male or Female.
 *   **Strength**: A numeric stat (1–100) representing physical power.
 *   **Intelligence**: A numeric stat (1–100) representing mental capability.
+*   **Speed**: A numeric stat (10–100) representing movement speed multiplier (0.1x to 1x).
 *   **Position**: (X, Y) coordinates within the simulation world.
 
 ### 2.2. Personality
@@ -25,11 +26,12 @@ The **Sim Simulator** is a lightweight, cross-platform simulation game that oper
 Each agent has internal preferences for what they want in a mate:
 *   **Minimum Strength**: e.g., "wants partner with STR ≥ 30"
 *   **Minimum Intelligence**: e.g., "wants partner with INT ≥ 25"
+*   **Minimum Speed**: e.g., "wants partner with SPD ≥ 30"
 *   **Preferred Personality**: Some agents prefer Introverts, some prefer Extroverts, some have no preference (`null` = "Any").
 
 #### Preference Degradation
 If an agent goes a long time without successfully mating, their requirements **gradually lower** over time. These values are **customizable** in the World Settings:
-*   Every `PREF_DEGRADE_INTERVAL` ticks (default: 150), minimum strength and intelligence requirements decrease.
+*   Every `PREF_DEGRADE_INTERVAL` ticks (default: 150), minimum strength, intelligence, and speed requirements decrease.
 *   The speed at which standards drop can be adjusted via the **Standards Drop Gap** setting.
 *   After being lonely for a very long time, the agent stops caring about personality type entirely.
 *   Requirements reset when the agent successfully mates.
@@ -42,7 +44,7 @@ Agents don't just drift randomly — they exhibit behavioral steering based on t
 3.  **Fighter-based force**: High-fighter agents steer toward same-gender agents. Low-fighter agents steer away.
 4.  **Random drift**: A small amount of noise is applied to prevent perfectly predictable paths.
 5.  **Needs-based overrides**: Hunger forces tracking food, while encountering the plague, or entering an extinction-level population event, forces massive homing steering toward Tribe/World Capitals.
-6.  **Speed clamping**: Agents cannot exceed `MAX_SPEED` (customizable) and have a minimum speed floor to prevent stalling.
+6.  **Speed clamping**: Agents cannot exceed their `dynamicMaxSpeed`, which is influenced by their **Speed Stat** (0.1x to 1.0x of the global `MAX_SPEED`). This prevents unnatural teleportation and ensures consistent movement.
 
 Steering is computed within an `AWARENESS_RADIUS` (customizable) — agents can only "sense" others within this range.
 
@@ -83,7 +85,7 @@ A social-pressure triggered mental breakdown that turns agents into tribal outca
 *   **Mental Resilience:** High Intelligence suppresses stress; **low-intelligence agents** accumulate stress up to **5x faster** than geniuses.
 *   **Visuals:** Agent turns **Deep Purple** with a pulsing glow.
 *   **Hostility:** Both `fighter` and `Libido` rules are bypassed. The agent has a **100% fight chance** against every neighbor regardless of tribe or gender.
-*   **Bonus Stats:** +30 Strength, **100 Fighter**, and a **2.5x Speed Multiplier**.
+*   **Bonus Stats:** +30 Strength, **100 Fighter**, and a **1.2x Speed Multiplier**.
 *   **Lethality:** Berserkers have a **1.5x Interaction Radius** (Attack Range) and a **5x Power Multiplier** against sane agents.
 *   **Rage Immunity:** Berserkers are **immune to weariness** and exhaustion during their state.
 *   **Duration:** 1200–2400 ticks (1-2 simulation years).

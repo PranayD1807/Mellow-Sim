@@ -46,7 +46,7 @@ Fighting takes a physical toll. Winners don't walk away unscathed.
 - **Visual Indicator:** A growing orange arc appears around agents whose weariness exceeds 20%, intensifying as fatigue increases.
 
 ## 4. Reproduction and Life Cycles
-- **Initiation:** Triggered when two opposite-gender adults (ages 18-49) collide. Both agents must pass each other's minimum preference checks (`prefMinStrength`, `prefMinIntelligence`, `prefPersonality`).
+- **Initiation:** Triggered when two opposite-gender adults (ages 18-49) collide. Both agents must pass each other's minimum preference checks (`prefMinStrength`, `prefMinIntelligence`, `prefMinSpeed`, `prefPersonality`).
 - **Preference Degradation:** As an agent remains single, their rigid partner preferences degrade. Lonely agents constantly lower their standards so they can eventually reproduce.
 - **Mating:** If preferences are met, the probability of successful mating scales with their combined `Libido`. There is a small chance for triplets or twins. Parents then enter a temporary mating cooldown (customizable).
 - **Genetics:** Offspring average their parents' stats with a sudden mutation variance (+/- 15%). Traits like `Charm`, `Libido`, and `Fighter` are also passed down or mutated randomly. 
@@ -83,7 +83,7 @@ Civilizations that become too successful often fall from within through a psycho
 - **Mental Resilience (Intelligence Link):** Intelligence acts as a social stabilizer. **Low-intelligence agents** suffer a breakdown up to **5x faster** than geniuses. A high-intelligence agent suppresses stress gain, while a low-intelligence agent gains up to +1.0 stress per tick.
 - **The Snap:** If Stress exceeds 150 points, the agent goes **Berserk**.
 - **Catastrophic Buffs:** To ensure the state is a civilization-level threat, Berserkers receive massive technical overrides:
-  - **2.5x Max Speed:** They become perfect hunters that cannot be outrun.
+  - **1.2x Max Speed:** They become slightly faster than sane agents but no longer impossible to outrun.
   - **1.5x interaction Radius:** Their "Attack Range" increases, making it harder to dodge them.
   - **5x Combat Power Multiplier:** They near-guaranteed kill any sane agent they touch.
   - **Weariness Immunity:** They never tire or exhaust during their rage.

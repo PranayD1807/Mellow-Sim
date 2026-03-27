@@ -44,6 +44,7 @@ export class Agent extends Entity {
             this.charm = traits.charm;
             this.prefMinStrength = traits.prefMinStrength;
             this.prefMinIntelligence = traits.prefMinIntelligence;
+            this.prefMinSpeed = traits.prefMinSpeed;
             this.prefPersonality = traits.prefPersonality;
         } else {
             this.personality = Math.random() > 0.5 ? PERSONALITY.EXTROVERT : PERSONALITY.INTROVERT;
@@ -52,6 +53,7 @@ export class Agent extends Entity {
             this.charm = randInt(10, 90);
             this.prefMinStrength = randInt(10, 50);
             this.prefMinIntelligence = randInt(10, 50);
+            this.prefMinSpeed = randInt(10, 50);
             this.prefPersonality = Math.random() < 0.3 ? null : (Math.random() > 0.5 ? PERSONALITY.EXTROVERT : PERSONALITY.INTROVERT);
         }
 
@@ -89,11 +91,11 @@ export class Agent extends Entity {
     }
 
     /**
-     * Speed attribute acts as a multiplier on MAX_SPEED.
-     * speed=50 is the neutral baseline (1x). speed=100 is 2x. speed=10 is 0.2x.
+     * Speed attribute acts as a percentage of MAX_SPEED.
+     * speed=100 is the full base speed (1x). speed=20 is 0.2x.
      */
     get dynamicMaxSpeed() {
-        return CONFIG.MAX_SPEED * (this.speed / 50);
+        return CONFIG.MAX_SPEED * (this.speed / 100);
     }
 
     /**
@@ -153,6 +155,7 @@ export class Agent extends Entity {
         if (this.ticksSinceLastMate > 0 && this.ticksSinceLastMate % CONFIG.PREF_DEGRADE_INTERVAL === 0) {
             this.prefMinStrength = Math.max(0, this.prefMinStrength - CONFIG.PREF_DEGRADE_AMOUNT);
             this.prefMinIntelligence = Math.max(0, this.prefMinIntelligence - CONFIG.PREF_DEGRADE_AMOUNT);
+            this.prefMinSpeed = Math.max(0, this.prefMinSpeed - CONFIG.PREF_DEGRADE_AMOUNT);
             if (this.ticksSinceLastMate > CONFIG.PREF_DEGRADE_INTERVAL * 5) {
                 this.prefPersonality = null;
             }
@@ -415,17 +418,19 @@ export class Agent extends Entity {
         this.vx += steerX;
         this.vy += steerY;
 
-        const maxSpeed = this.isBerserk ? this.dynamicMaxSpeed * 2.5 : this.dynamicMaxSpeed;
+        const maxSpeed = this.isBerserk ? this.dynamicMaxSpeed * 1.2 : this.dynamicMaxSpeed;
 
         const speed = Math.hypot(this.vx, this.vy);
         if (speed > maxSpeed) {
             this.vx = (this.vx / speed) * maxSpeed;
             this.vy = (this.vy / speed) * maxSpeed;
         }
-        if (speed < 0.1) {
+        if (speed < 0.05) {
             const angle = rand(0, Math.PI * 2);
-            this.vx = Math.cos(angle) * (this.isBerserk ? 0.8 : 0.15);
-            this.vy = Math.sin(angle) * (this.isBerserk ? 0.8 : 0.15);
+            const movePower = this.isBerserk ? 0.9 : 0.5;
+            const boost = Math.max(0.08, maxSpeed * movePower);
+            this.vx = Math.cos(angle) * boost;
+            this.vy = Math.sin(angle) * boost;
         }
     }
 

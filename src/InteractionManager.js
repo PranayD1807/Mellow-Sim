@@ -212,6 +212,9 @@ export class InteractionManager {
 
         checks++;
         if (candidate.intelligence >= seeker.prefMinIntelligence) score++;
+        
+        checks++;
+        if (candidate.speed >= seeker.prefMinSpeed) score++;
 
         if (seeker.prefPersonality !== null) {
             checks++;
@@ -341,6 +344,7 @@ export class InteractionManager {
                 charm: clamp(Math.floor((parentA.charm + parentB.charm) / 2 + traitModifier + randInt(-10, 10)), 0, 100),
                 prefMinStrength: clamp(randInt(10, 50), 0, 80),
                 prefMinIntelligence: clamp(randInt(10, 50), 0, 80),
+                prefMinSpeed: clamp(randInt(10, 50), 0, 80),
                 prefPersonality: Math.random() < 0.3 ? null : (Math.random() > 0.5 ? PERSONALITY.EXTROVERT : PERSONALITY.INTROVERT),
             };
 

@@ -53,7 +53,7 @@ A core social feedback loop that prevents infinite population growth in dense ar
 *   **Mental Resilience**: The accumulation rate is inversely proportional to `intelligence`. High-intelligence agents suppress stress gain, while low-intelligence agents suffer up to 5x faster mental breakdown.
 *   **Berserker Trigger**: At 150 Stress points, an agent enters a catastrophic "Berserker" state.
 *   **Predatory Scaling**: To act as a civilization-wide threat, Berserkers receive technical overrides:
-    *   **2.5x Max Speed** boost.
+    *   **1.2x Max Speed** boost.
     *   **1.5x Interaction Radius** (Attack Range).
     *   **5x Combat Power Multiplier** against sane agents.
     *   **Zero-Weariness** (Immune to combat exhaustion).
