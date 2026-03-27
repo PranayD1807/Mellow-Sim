@@ -72,8 +72,30 @@ The simulation has an emergency failsafe to prevent total civilization collapse 
 - **The "Romeo & Juliet" Buff:** Because this was a cross-tribe romance, the resulting child is born as a hybrid. Hybrids are granted an immense statistical advantage, inherently clamping their starting Strength and Intelligence between 90-100, and fully maximizing their Fighter trait.
 
 ## 7. Monster Mechanics
-- **Spawning:** Monsters are Aberrant apex predators that occasionally spawn at the edges of the world (Spawn Interval is customizable).
-- **Hunting and Combat:** Monsters actively hunt and devour human agents (Monster Speed and Awareness are customizable). When caught, regular humans are instantly killed unless they are incredibly strong and intelligent, in which case they have a chance to heroically strike back, surviving the encounter or even slaying the monster.
-- **Territorial Disputes:** Monsters are highly territorial. If two monsters cross paths, they will engage in a brutal Titan clash (Monster Fights), dealing massive damage to one another until one or both are dead.
-- **Devouring & Starvation:** Monsters have enormous hunger capacities. Devouring humans provides them with massive nutritional sustenance. If they fail to catch prey, they will eventually starve and die.
-- **Aberrant Mating (Rare):** Very rarely (15% chance), a monster may spare an adult female and reproduce, spawning a new monster offspring (Monster Births) with extreme base stats derived from both parents.
+- **Spawning:** Monsters are Aberrant apex predators that occasionally spawn at the edges of the world.
+- **Hunting and Combat:** Monsters actively hunt and devour human agents. **Interaction Buffer:** Monsters have a 5px interaction buffer beyond their physical radius to match their irregular, jagged visual shapes.
+- **Heroic Survival:** Only the most elite agents (high Strength + high Intelligence) have a chance to survive a hit. This survival chance is **reduced by 15% for every additional monster** touching the agent (The Swarm) and up to **50% by combat weariness**.
+- **Territorial Disputes:** Monsters are highly territorial. If two monsters cross paths, they will engage in a brutal Titan clash, dealing massive damage to one another until one or both are dead.
+
+## 8. The Berserker Mechanic (Overcrowding Madness)
+Civilizations that become too successful often fall from within.
+- **Stress Accumulation:** When an agent is surrounded by more than 20 neighbors, they begin accumulating **Stress** (+0.5 per tick).
+- **The Snap:** If Stress exceeds 150 points, the agent goes **Berserk**.
+- **Behavior:** Berserkers turn **Deep Purple** and enter a state of pure rage for 1-2 years. They ignore all tribal and gender rules, treating every living thing (including their own family and tribe) as a combat target with a **100% fight chance**.
+- **Stats:** Berserker rage grants +50 to Fighter and +20 to Strength, making them incredibly dangerous.
+- **Recovery:** If an agent leaves the crowd, they recover Stress at a rate of -0.4 per tick. Sanity is found in solitude.
+
+## 9. Civilization History Track
+The simulation is no longer just a series of dots—it is a story.
+- **Milestones:** Significant events are recorded in a chronological "History Track" displayed at Game Over.
+- **Tracked Events:**
+  - **The Firsts:** first birth, first inter-tribe murder, first monster encounter.
+  - **Crises:** The Great Plague (>10% infected), The Berserker Crisis (>5 active berserkers), Extinction Risk (gender scarcity).
+  - **Demographic Reports:** Every 10 years, the simulation logs the current average Strength and Intelligence of the entire human race.
+  - **Boom & Bust:** Population milestones (100, 200, 300...) and "Great Dips" (population drops of >40% in a 5-year window).
+
+## 10. Memory and Architecture
+The engine uses a custom **Data-Oriented Web Worker** architecture. 
+- **State Serialization:** Agent data is packed into a 10-float stride within a `Float32Array` for ultra-fast transfer between threads.
+- **SharedArrayBuffer:** Physics and logic run at 60Hz in a worker, while the main thread handles rendering.
+- **Persistence:** Statistics and milestones are preserved even after simulation threads are terminated, ensuring a persistent record of your world's rise and fall.

@@ -32,6 +32,15 @@ export class InteractionManager {
         this.peakPop = 0;
         this.lastSnapPop = 0;
         this.popHistoryThresholds = [100, 200, 300, 400, 500]; // Multiples to track
+        this.allTimeHeroes = {
+            strongest: { name: 'None', val: 0 },
+            prolific: { name: 'None', val: 0 }
+        };
+        this.lastStats = {
+            avgStr: 0,
+            avgInt: 0
+        };
+        this.statHistory = [];
     }
 
     recordMilestone(tick, msg, type = 'info') {
@@ -613,7 +622,7 @@ export class InteractionManager {
                 if (agent.markedForDeath) continue;
 
                 const dist = distance(agent, monster);
-                if (dist < agent.radius + monster.radius) {
+                if (dist < agent.radius + monster.radius + 5) { // +5 buffer to match visual "blobliness"
                     if (!this.recordedEras.FIRST_MONSTER) {
                         this.recordedEras.FIRST_MONSTER = true;
                         this.recordMilestone(worldTick, `Humanity has met its match. The first Monster was spotted near ${agent.name}. The Age of Terror begins.`, 'warning');
@@ -656,10 +665,24 @@ export class InteractionManager {
                     damage += damage * (agent.intelligence / 100);
                     monster.hp -= damage;
 
-                    // Survival Check Check! Stronger and Smarter agents have a higher chance of surviving a blow (up to 80% natural + 20% smarts)
-                    const survivalChance = (agent.strength / 100) * 0.6 + (agent.intelligence / 100) * 0.3;
+                    // Survival Check Check! Stronger and Smarter agents can survive a blow, but exhaustion and swarms are deadly!
+                    const baseSurvival = (agent.strength / 100) * 0.6 + (agent.intelligence / 100) * 0.3;
 
-                    if (Math.random() < survivalChance) {
+                    // Penalty 1: Combat Weariness (Up to 50% penalty at max weariness)
+                    const wearinessPenalty = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (agent.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
+
+                    // Penalty 2: The Swarm (Being surrounded is lethal)
+                    let swarmCount = 0;
+                    for (const m of monstersArray) {
+                        if (!m.markedForDeath && distance(agent, m) < (agent.radius + m.radius + 15)) {
+                            swarmCount++;
+                        }
+                    }
+                    const swarmPenalty = Math.max(0.1, 1 - (swarmCount - 1) * 0.15); // -15% for each monster after the first
+
+                    const finalSurvivalChance = baseSurvival * wearinessPenalty * swarmPenalty;
+
+                    if (Math.random() < finalSurvivalChance) {
                         // Agent survives the clash!
                         this.pushApart(agent, monster, 5.0); // Massive knockback
                         agent.addKillWeariness(worldTick);   // Fighting a monster is exhausting!
@@ -727,6 +750,17 @@ export class InteractionManager {
     }
 
     checkGlobalMilestones(agents, worldTick) {
+        // 0. Genesis Snapshot (Year 0)
+        if (worldTick === 0 && agents.length > 0 && this.statHistory.length === 0) {
+            const totalStr = agents.reduce((sum, a) => sum + a.strength, 0);
+            const totalInt = agents.reduce((sum, a) => sum + a.intelligence, 0);
+            this.statHistory.push({
+                year: 0,
+                avgStr: Math.round(totalStr / agents.length),
+                avgInt: Math.round(totalInt / agents.length)
+            });
+        }
+
         if (agents.length === 0) {
             if (!this.recordedEras.THE_VOID && worldTick > 500) {
                 this.recordedEras.THE_VOID = true;
@@ -735,14 +769,14 @@ export class InteractionManager {
             return;
         }
 
-        // Berserker check
+        // 1. Berserker check
         const berserkCount = agents.filter(a => a.isBerserk).length;
         if (!this.recordedEras.BERSERKER_CRISIS && berserkCount > 5) {
             this.recordedEras.BERSERKER_CRISIS = true;
             this.recordMilestone(worldTick, `The Berserker Crisis: Overcrowding has driven many into a bloodthirsty rage. Chaos reigns.`, 'danger');
         }
 
-        // Gender scarcity check
+        // 2. Gender scarcity check
         const males = agents.filter(a => a.gender === 'Male' && !a.isElder(worldTick)).length;
         const females = agents.filter(a => a.gender === 'Female' && !a.isElder(worldTick)).length;
         if (!this.recordedEras.GENDER_SCARCITY && (males < 3 || females < 3) && agents.length > 20) {
@@ -751,9 +785,16 @@ export class InteractionManager {
             this.recordMilestone(worldTick, `Extinction looms: The population is almost devoid of ${scarce}. Repopulation is nearly impossible.`, 'warning');
         }
 
-        // Population Dynamics Check (Every 500 ticks)
+        // 3. Population Dynamics Check (Every 500 ticks)
         if (worldTick % 500 === 0) {
             const currentPop = agents.length;
+
+            // Plague check
+            const infectedCount = agents.filter(a => a.isInfected).length;
+            if (!this.recordedEras.PLAGUE_OUTBREAK && currentPop > 20 && infectedCount / currentPop > 0.1) {
+                this.recordedEras.PLAGUE_OUTBREAK = true;
+                this.recordMilestone(worldTick, `The Great Plague: A pestilence is spreading rapidly. Over 10% of the civilization is now infected.`, 'danger');
+            }
 
             // Peak check
             if (currentPop > this.peakPop) {
@@ -773,6 +814,20 @@ export class InteractionManager {
 
             this.lastSnapPop = currentPop;
         }
+
+        // 4. Demographic Snapshot (Every 300 ticks = 5 years - Now stored for graphing)
+        if (worldTick > 0 && worldTick % 300 === 0 && agents.length > 2) {
+            const totalStr = agents.reduce((sum, a) => sum + a.strength, 0);
+            const totalInt = agents.reduce((sum, a) => sum + a.intelligence, 0);
+            const avgStr = Math.round(totalStr / agents.length);
+            const avgInt = Math.round(totalInt / agents.length);
+
+            this.statHistory.push({
+                year: (worldTick / CONFIG.TICKS_PER_YEAR).toFixed(1),
+                avgStr,
+                avgInt
+            });
+        }
     }
 
     reset() {
@@ -789,5 +844,27 @@ export class InteractionManager {
             monster_deaths: 0
         };
         this.events = [];
+        this.milestones = [];
+        this.recordedEras = {
+            FIRST_BLOOD: false,
+            FIRST_BIRTH: false,
+            FIRST_MONSTER: false,
+            PLAGUE_OUTBREAK: false,
+            BERSERKER_CRISIS: false,
+            GENDER_SCARCITY: false,
+            THE_VOID: false
+        };
+        this.peakPop = 0;
+        this.lastSnapPop = 0;
+        this.popHistoryThresholds = [100, 200, 300, 400, 500];
+        this.allTimeHeroes = {
+            strongest: { name: 'None', val: 0 },
+            prolific: { name: 'None', val: 0 }
+        };
+        this.lastStats = {
+            avgStr: 0,
+            avgInt: 0
+        };
+        this.statHistory = [];
     }
 }

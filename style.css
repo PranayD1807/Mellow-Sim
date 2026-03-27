@@ -286,7 +286,7 @@ header p {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 380px;
+  width: 580px;
   background: var(--panel-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);

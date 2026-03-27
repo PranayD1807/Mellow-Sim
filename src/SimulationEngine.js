@@ -333,7 +333,7 @@ export class SimulationEngine {
             const h = s / 2;
 
             this.ctx.save();
-            
+
             // Render Bloom/Glow
             if (isBerserk) {
                 const pulse = 10 + Math.sin(Date.now() / 150) * 15;
@@ -632,40 +632,41 @@ export class SimulationEngine {
         this.isPaused = true;
         this.worker.postMessage({ type: 'PAUSE', isPaused: true }); // Make sure worker halts
 
-        document.getElementById('go-reason').innerText = reason;
+        const setStat = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        };
 
-        const worldYear = Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR);
-        document.getElementById('go-years').innerText = worldYear;
-        document.getElementById('go-pop').innerText = data.demographics.pop;
-        document.getElementById('go-peak').innerText = data.stats.peak_pop || 0;
+        setStat('go-reason', reason);
+        setStat('go-years', Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR));
+        setStat('go-pop', data.demographics.pop);
+        setStat('go-peak', data.stats.peak_pop || 0);
 
-        document.getElementById('go-encounters').innerText = data.stats.encounters;
-        document.getElementById('go-kills').innerText = data.stats.kills;
-        document.getElementById('go-repros').innerText = data.stats.repros;
-        document.getElementById('go-born').innerText = data.stats.born;
-        if (document.getElementById('go-incest')) {
-            document.getElementById('go-incest').innerText = data.stats.incest_born;
-        }
-        document.getElementById('go-natural').innerText = data.stats.natural_deaths;
+        setStat('go-encounters', data.stats.encounters);
+        setStat('go-kills', data.stats.kills);
+        setStat('go-repros', data.stats.repros);
+        setStat('go-born', data.stats.born);
+        setStat('go-incest', data.stats.incest_born);
+        setStat('go-natural', data.stats.natural_deaths);
 
-        document.getElementById('go-avg-str').innerText = data.analytics.avgStr;
-        document.getElementById('go-avg-int').innerText = data.analytics.avgInt;
+        setStat('go-avg-str', data.analytics.avgStr);
+        setStat('go-avg-int', data.analytics.avgInt);
 
-        document.getElementById('go-monster-pop').innerText = data.demographics.monsters || 0;
-        document.getElementById('go-monster-deaths').innerText = data.stats.monster_deaths || 0;
-        document.getElementById('go-monster-fights').innerText = data.stats.monster_fights || 0;
-        document.getElementById('go-monster-births').innerText = data.stats.monster_births || 0;
+        setStat('go-monster-pop', data.demographics.monsters || 0);
+        setStat('go-monster-deaths', data.stats.monster_deaths || 0);
+        setStat('go-monster-fights', data.stats.monster_fights || 0);
+        setStat('go-monster-births', data.stats.monster_births || 0);
 
         if (data.analytics.prolificCount > 0) {
-            document.getElementById('go-prolific').innerText = `${data.analytics.prolificName} (${data.analytics.prolificCount} children)`;
+            setStat('go-prolific', `${data.analytics.prolificName} (${data.analytics.prolificCount} children)`);
         } else {
-            document.getElementById('go-prolific').innerText = 'None';
+            setStat('go-prolific', 'None');
         }
 
         if (data.analytics.strongestStr > 0) {
-            document.getElementById('go-strongest').innerText = `${data.analytics.strongestName} (${data.analytics.strongestStr} STR)`;
+            setStat('go-strongest', `${data.analytics.strongestName} (${data.analytics.strongestStr} STR)`);
         } else {
-            document.getElementById('go-strongest').innerText = 'None';
+            setStat('go-strongest', 'None');
         }
 
         // Render History Track
@@ -686,7 +687,141 @@ export class SimulationEngine {
             track.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-style: italic;">No notable history recorded.</div>';
         }
 
+        // Unhide the modal first so dimensions are non-zero
         document.getElementById('game-over-modal').classList.remove('hidden');
+
+        // Render demographic chart after a tiny reflow delay
+        setTimeout(() => this.renderStatsChart(data.statHistory), 50);
+    }
+
+    renderStatsChart(history) {
+        const canvas = document.getElementById('go-stats-chart');
+        if (!canvas || !history || history.length === 0) {
+            // No data at all
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.font = 'italic 12px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('No historical data recorded', canvas.width / 2, canvas.height / 2);
+            }
+            return;
+        }
+
+        // Match resolution
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const padding = 25;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Grid lines (horizontal)
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+            let y = padding + (h - padding * 2) * (i / 4);
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(w - padding, y);
+            ctx.stroke();
+
+            // Y-axis labels (0, 25, 50, 75, 100)
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.font = '9px Inter';
+            ctx.fillText(100 - i * 25, 2, y + 3);
+            ctx.setLineDash([5, 5]);
+        }
+        ctx.setLineDash([]);
+
+        const xStep = (w - padding * 2) / Math.max(1, history.length - 1);
+        const getY = (val) => h - padding - (val / 100) * (h - padding * 2);
+
+        if (history.length === 1) {
+            // Draw Genesis Dots
+            const x = padding;
+            ctx.fillStyle = '#f87171'; // STR
+            ctx.beginPath(); ctx.arc(x, getY(history[0].avgStr), 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#60a5fa'; // INT
+            ctx.beginPath(); ctx.arc(x, getY(history[0].avgInt), 5, 0, Math.PI * 2); ctx.fill();
+        } else {
+            // Gradient Area Fills (Strength)
+            const strGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
+            strGrad.addColorStop(0, 'rgba(248, 113, 113, 0.2)');
+            strGrad.addColorStop(1, 'rgba(248, 113, 113, 0)');
+
+            ctx.beginPath();
+            ctx.fillStyle = strGrad;
+            history.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.avgStr);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.lineTo(padding + (history.length - 1) * xStep, h - padding);
+            ctx.lineTo(padding, h - padding);
+            ctx.closePath();
+            ctx.fill();
+
+            // Strength Line
+            ctx.beginPath();
+            ctx.strokeStyle = '#f87171';
+            ctx.lineWidth = 3;
+            ctx.lineJoin = 'round';
+            history.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.avgStr);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Gradient Area Fills (Intelligence)
+            const intGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
+            intGrad.addColorStop(0, 'rgba(96, 165, 250, 0.2)');
+            intGrad.addColorStop(1, 'rgba(96, 165, 250, 0)');
+
+            ctx.beginPath();
+            ctx.fillStyle = intGrad;
+            history.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.avgInt);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.lineTo(padding + (history.length - 1) * xStep, h - padding);
+            ctx.lineTo(padding, h - padding);
+            ctx.closePath();
+            ctx.fill();
+
+            // Intelligence Line
+            ctx.beginPath();
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 3;
+            ctx.lineJoin = 'round';
+            history.forEach((pt, i) => {
+                const x = padding + i * xStep;
+                const y = getY(pt.avgInt);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+
+        // Legend
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 10px Inter';
+        ctx.fillStyle = '#f87171';
+        ctx.fillText('STRENGTH', padding, h - 5);
+        ctx.fillStyle = '#60a5fa';
+        ctx.fillText('INTELLIGENCE', w / 2, h - 5);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.textAlign = 'right';
+        const displayYear = history[history.length - 1].year;
+        ctx.fillText(`YEAR ${displayYear}`, w - padding, h - 5);
     }
 
     start() {

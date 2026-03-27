@@ -70,16 +70,30 @@ When two agents of **different genders** meet:
 5.  **Inheritance**: Children inherit averaged stats from both parents with mutation. **Incest** dramatically lowers output stats unless the tribe is desperate. **Cross-Tribe Romeo & Juliet mating** massively boosts the child's genetic ceiling.
 6.  Both parents enter a reproduction cooldown period (**Repro Cooldown** setting).
 
-## 5. Monster Interactions
-*   **Apex Predators**: Monsters target the nearest human within their massive awareness radius.
-*   **Devouring**: When a Monster catches a human, the human is typically instantly killed.
-    *   **Heroic Survival**: Very strong and intelligent humans have a small percentage chance to survive the blow and knock the monster back.
-    *   **Heroic Slaying**: If a human deals enough damage to deplete the monster's HP, they heroically slay the beast.
-*   **Monster vs Monster**: Monsters are inherently territorial. If two monsters collide, they deal damage to each other and violently push apart (recorded in UI as **Monster Fights**).
-*   **Aberrant Reproduction**: There is a chance (randomized but influenced by stats) when a monster encounters an adult female human that it will spare her and reproduce instead, spawning a new monster with combined extreme stats (recorded in UI as **Monster Births**).
-*   **Customization**: Monster speed, awareness, and spawn interval are all adjustable in the World Settings.
+### 5.1. Monster Lethality & The Swarm
+Encounters with Monsters are typically fatal, but elite agents can survive if they aren't overwhelmed.
+*   **Base Survival Chance:** `(Strength / 100) * 0.6 + (Intelligence / 100) * 0.3`. (Max 90%)
+*   **The Swarm Penalty:** For every additional monster currently touching an agent beyond the first, the survival chance is reduced by **15%**. (Surrounded = Death).
+*   **Weariness Penalty:** Combat fatigue reduces survival chance by up to **50%** at maximum weariness.
+*   **Interaction Buffer:** Collision check is `dist < radii + 5px` to match visual jaggedness.
 
-## 6. Design Guidelines for Expansion
+## 6. The Berserker State (Psychosis)
+A social-pressure triggered mental breakdown that turns agents into tribal outcasts.
+*   **Trigger:** Accumulating **150 Stress** points from being in a crowd (>20 neighbors).
+*   **Visuals:** Agent turns **Deep Purple** with a pulsing glow.
+*   **Hostility:** Both `fighter` and `Libido` rules are bypassed. The agent has a **100% fight chance** against every neighbor regardless of tribe or gender.
+*   **Bonus Stats:** +50 Fighter, +20 Strength.
+*   **Duration:** 1200–2400 ticks (1-2 simulation years).
+*   **Cool-down:** Stress recovers by 0.4 per tick when the agent is away from crowds.
+
+### 7. Global Failsafes & History
+*   **Extinction Prevention:** If a gender is critically scarce, "Romeo & Juliet" cross-tribe mating is forced with 100% success.
+*   **Milestones:** Major events (First Blood, Plagues, Crashes) are logged in the **History Track**.
+*   **Demographic Evolution:** The simulation records a statistical snapshot of average Strength and Intelligence every **5 years** (300 ticks), including a **Genesis Snapshot** (Year 0).
+*   **Final Archiving:** Upon simulation end, these snapshots are rendered into a visual **Trend Graph** (Evolution Chart), and all-time hero records (Strongest/Most Prolific) are archived for review.
+
+
+## 8. Design Guidelines for Expansion
 *   **Simplicity**: The game is designed to be straightforward. Future systems (e.g. food, age, disease, alliances) should plug into this base without convoluting the core loop.
 *   **Clean Code**: Emphasize readability, modularity, and explicit state management.
 *   **Performance**: Optimize proximity checks (e.g., spatial partitioning) if population scales up.

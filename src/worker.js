@@ -275,8 +275,20 @@ function runLoop() {
 
         totalStr += a.strength;
         totalInt += a.intelligence;
-        if (!mostProlific || a.offspringCount > mostProlific.offspringCount) mostProlific = { name: a.name, count: a.offspringCount };
-        if (!strongest || a.strength > strongest.strength) strongest = { name: a.name, str: a.strength };
+        
+        // Update All-Time Heroes in InteractionManager
+        if (a.offspringCount > interactionManager.allTimeHeroes.prolific.val) {
+            interactionManager.allTimeHeroes.prolific = { name: a.name, val: a.offspringCount };
+        }
+        if (a.strength > interactionManager.allTimeHeroes.strongest.val) {
+            interactionManager.allTimeHeroes.strongest = { name: a.name, val: Math.round(a.strength) };
+        }
+    }
+
+    // Cache latest averages before they potentially go to 0
+    if (agents.length > 0) {
+        interactionManager.lastStats.avgStr = Math.round(totalStr / agents.length);
+        interactionManager.lastStats.avgInt = Math.round(totalInt / agents.length);
     }
 
     const particleBuffer = new Float32Array(particles.length * 4);
@@ -384,15 +396,16 @@ function runLoop() {
             tribeRed, tribeBlue, infectedCount, foodCount: foods.length, monsterCount: monsters.length
         },
         analytics: {
-            avgStr: agents.length ? Math.round(totalStr / agents.length) : '-',
-            avgInt: agents.length ? Math.round(totalInt / agents.length) : '-',
-            prolificName: mostProlific ? mostProlific.name : 'None',
-            prolificCount: mostProlific ? mostProlific.count : 0,
-            strongestName: strongest ? strongest.name : 'None',
-            strongestStr: strongest ? strongest.str : 0
+            avgStr: interactionManager.lastStats.avgStr || '-',
+            avgInt: interactionManager.lastStats.avgInt || '-',
+            prolificName: interactionManager.allTimeHeroes.prolific.name,
+            prolificCount: interactionManager.allTimeHeroes.prolific.val,
+            strongestName: interactionManager.allTimeHeroes.strongest.name,
+            strongestStr: interactionManager.allTimeHeroes.strongest.val
         },
         events: [...interactionManager.events, ...godEvents],
         milestones: interactionManager.milestones,
+        statHistory: interactionManager.statHistory,
         selectedAgent: selectedAgentData,
         agentBuffer: agentBuffer.buffer,
         particleBuffer: particleBuffer.buffer,
