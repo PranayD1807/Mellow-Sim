@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mellow Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,8 +38,6 @@
                 data-action="food" title="Drop Food">🍔</button>
             <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
                 data-action="potion" title="Love Potion">💖</button>
-            <button class="btn btn-icon btn-god" style="font-size: 1.5rem; width: 48px; height: 48px;"
-                data-action="plague" title="Plague">🦠</button>
         </div>
 
         <div id="settings-modal" class="hidden">
@@ -266,14 +265,6 @@
                 <span id="stat-extroverts" class="stat-value" style="color: #34d399;">0</span>
             </div>
             <div class="stat-box">
-                <span class="stat-label">Incest Population</span>
-                <span id="stat-incest-current" class="stat-value" style="color: #ef4444;">0</span>
-            </div>
-            <div class="stat-box">
-                <span class="stat-label">Infected 🦠</span>
-                <span id="stat-infected" class="stat-value" style="color: #84cc16;">0</span>
-            </div>
-            <div class="stat-box">
                 <span class="stat-label">Available Food</span>
                 <span id="stat-food" class="stat-value" style="color: #a3e635;">0</span>
             </div>
@@ -435,7 +426,7 @@
                 </svg>
             </button>
             <button id="btn-pause" class="btn">Pause</button>
-            <button id="btn-reset" class="btn">Reset Simulation</button>
+            <button id="btn-reset" class="btn">End Game</button>
         </div>
     </div>
 
@@ -560,7 +551,7 @@
             </div>
 
             <div style="margin-top: 16px; display: flex; justify-content: center;">
-                <button id="btn-go-restart" class="btn" style="width: 100%;">Restart Simulation</button>
+                <button id="btn-go-restart" class="btn" style="width: 100%;">End Game</button>
             </div>
         </div>
     </div>

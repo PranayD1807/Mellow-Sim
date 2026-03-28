@@ -24,7 +24,6 @@ export class InteractionManager {
             FIRST_BLOOD: false,
             FIRST_BIRTH: false,
             FIRST_MONSTER: false,
-            PLAGUE_OUTBREAK: false,
             BERSERKER_CRISIS: false,
             GENDER_SCARCITY: false,
             THE_VOID: false // Total extinction
@@ -582,17 +581,6 @@ export class InteractionManager {
             }
 
             for (const b of nearbyInteraction) {
-                // Plague spread guarantees infection on any interaction
-                if ((a.isInfected || b.isInfected) && !(a.isInfected && b.isInfected)) {
-                    a.isInfected = true;
-                    b.isInfected = true;
-                    if (Math.random() < 0.05) { // 5% chance to log an infection event so it doesn't spam
-                        this.events.push({
-                            type: 'plague',
-                            msg: `🦠 The Plague spreads between ${a.name} and ${b.name}.`
-                        });
-                    }
-                }
 
                 const isSameTribe = !CONFIG.ENABLE_TRIBES || a.tribe === b.tribe;
                 const isOppositeGender = a.gender !== b.gender;
@@ -819,13 +807,6 @@ export class InteractionManager {
         if (worldTick % 500 === 0) {
             const currentPop = agents.length;
 
-            // Plague check
-            const infectedCount = agents.filter(a => a.isInfected).length;
-            if (!this.recordedEras.PLAGUE_OUTBREAK && currentPop > 20 && infectedCount / currentPop > 0.1) {
-                this.recordedEras.PLAGUE_OUTBREAK = true;
-                this.recordMilestone(worldTick, `The Great Plague: A pestilence is spreading rapidly. Over 10% of the civilization is now infected.`, 'danger');
-            }
-
             // Peak check
             if (currentPop > this.peakPop) {
                 this.peakPop = currentPop;
@@ -883,7 +864,6 @@ export class InteractionManager {
             FIRST_BLOOD: false,
             FIRST_BIRTH: false,
             FIRST_MONSTER: false,
-            PLAGUE_OUTBREAK: false,
             BERSERKER_CRISIS: false,
             GENDER_SCARCITY: false,
             THE_VOID: false,

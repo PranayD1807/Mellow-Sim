@@ -23,6 +23,8 @@ let isPaused = false;
 let timeoutId = null;
 
 function reset(w, h) {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = null;
     agents = [];
     particles = [];
     foods = [];
@@ -129,10 +131,6 @@ self.onmessage = function (e) {
                 for (let i = 0; i < 15; i++) particles.push(new Particle(closest.x, closest.y, '#f472b6'));
                 godEvents.push({ type: 'romance', msg: `💖 ${closest.name} feels undeniably charming after drinking the Love Potion.` });
             }
-        } else if (data.action === 'plague') {
-            let closest = null, minD = Infinity;
-            agents.forEach(a => { const d = Math.hypot(a.x - data.x, a.y - data.y); if (d < minD) { minD = d; closest = a; } });
-            if (minD < 60 && closest) closest.isInfected = true;
         }
     }
 };
@@ -243,7 +241,7 @@ function runLoop() {
     const agentBuffer = new Float32Array(agents.length * 10);
     let offset = 0;
     let males = 0, females = 0, intro = 0, extro = 0, incest = 0;
-    let tribeRed = 0, tribeBlue = 0, infectedCount = 0;
+    let tribeRed = 0, tribeBlue = 0;
 
     let totalStr = 0;
     let totalInt = 0;
@@ -264,8 +262,7 @@ function runLoop() {
         else if (a.tribe === 'Blue') { tribeBlue++; tInt = 1; }
         agentBuffer[offset++] = tInt;
 
-        if (a.isInfected) infectedCount++;
-        agentBuffer[offset++] = a.isInfected ? 1 : 0;
+        agentBuffer[offset++] = 0; // Padding (previously infection)
         agentBuffer[offset++] = CONFIG.ENABLE_HUNGER ? a.hunger / CONFIG.MAX_HUNGER : 1; // hunger ratio
         agentBuffer[offset++] = CONFIG.ENABLE_COMBAT_WEARINESS ? a.weariness / CONFIG.WEARINESS_MAX : 0; // weariness ratio
         agentBuffer[offset++] = a.isBerserk ? 1 : 0; // 10th float: Manic flag
@@ -398,7 +395,7 @@ function runLoop() {
         demographics: {
             pop: agents.length,
             males, females, intro, extro, incest,
-            tribeRed, tribeBlue, infectedCount, foodCount: foods.length, monsterCount: monsters.length
+            tribeRed, tribeBlue, foodCount: foods.length, monsterCount: monsters.length
         },
         analytics: {
             avgStr: interactionManager.lastStats.avgStr || '-',

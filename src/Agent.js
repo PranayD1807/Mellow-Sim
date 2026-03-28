@@ -22,7 +22,6 @@ export class Agent extends Entity {
         this.offspringCount = 0;
         this.tribe = tribe || Object.values(TRIBE)[randInt(0, Object.values(TRIBE).length)];
         this.hunger = randInt(CONFIG.MAX_HUNGER * 0.5, CONFIG.MAX_HUNGER);
-        this.isInfected = false;
         this.gender = gender || (Math.random() > 0.5 ? GENDER.MALE : GENDER.FEMALE);
         this.name = generateName(this.gender);
         this.strength = strength || randInt(1, 100);
@@ -352,12 +351,6 @@ export class Agent extends Entity {
                     // PANIC: Run away from Berserkers immediately! 
                     socialSumX -= nx * 4.0 * CONFIG.STEER_STRENGTH * fearDampening;
                     socialSumY -= ny * 4.0 * CONFIG.STEER_STRENGTH * fearDampening;
-                } else if (other.isInfected) {
-                    const fleeUrge = Math.max(0, (this.intelligence - 50) / 50);
-                    if (fleeUrge > 0) {
-                        socialSumX -= nx * fleeUrge * CONFIG.STEER_STRENGTH * 1.5 * fearDampening;
-                        socialSumY -= ny * fleeUrge * CONFIG.STEER_STRENGTH * 1.5 * fearDampening;
-                    }
                 } else if (!isSameTribe || this.isBerserk) {
                     // If we are BERSERK, everyone is an enemy! No tribe rules apply.
                     let fightUrge = (this.fighter - 30) / 30; // Extra aggressive
@@ -454,12 +447,6 @@ export class Agent extends Entity {
             if (this.hunger <= 0) {
                 this.markedForDeath = true;
                 this.deathReason = 'starvation';
-            }
-        }
-        if (this.isInfected) {
-            if (Math.random() < 0.002) {
-                this.markedForDeath = true;
-                this.deathReason = 'plague';
             }
         }
 

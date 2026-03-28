@@ -43,7 +43,7 @@ Agents don't just drift randomly — they exhibit behavioral steering based on t
 2.  **Libido-based force**: High-libido agents steer toward opposite-gender agents. Low-libido agents steer away.
 3.  **Fighter-based force**: High-fighter agents steer toward same-gender agents. Low-fighter agents steer away.
 4.  **Random drift**: A small amount of noise is applied to prevent perfectly predictable paths.
-5.  **Needs-based overrides**: Hunger forces tracking food, while encountering the plague, or entering an extinction-level population event, forces massive homing steering toward Tribe/World Capitals.
+5.  **Needs-based overrides**: Hunger forces tracking food, while entering an extinction-level population event forces massive homing steering toward Tribe/World Capitals.
 6.  **Speed clamping**: Agents cannot exceed their `dynamicMaxSpeed`, which is influenced by their **Speed Stat** (0.1x to 1.0x of the global `MAX_SPEED`). This prevents unnatural teleportation and ensures consistent movement.
 
 Steering is computed within an `AWARENESS_RADIUS` (customizable) — agents can only "sense" others within this range.
@@ -86,7 +86,7 @@ A social-pressure triggered mental breakdown that turns agents into tribal outca
 *   **Visuals:** Agent turns **Deep Purple** with a pulsing glow.
 *   **Hostility:** Both `fighter` and `Libido` rules are bypassed. The agent has a **100% fight chance** against every neighbor regardless of tribe or gender.
 *   **Bonus Stats:** +30 Strength, **100 Fighter**, and a **1.2x Speed Multiplier**.
-*   **Lethality:** Berserkers have a **1.5x Interaction Radius** (Attack Range) and a **5x Power Multiplier** against sane agents.
+*   **Lethality:** Berserker have a **1.5x Interaction Radius** (Attack Range) and a **5x Power Multiplier** against sane agents.
 *   **Rage Immunity:** Berserkers are **immune to weariness** and exhaustion during their state.
 *   **Duration:** 1200–2400 ticks (1-2 simulation years).
 *   **Cool-down:** Stress recovers slowly when away from crowds.
@@ -94,8 +94,8 @@ A social-pressure triggered mental breakdown that turns agents into tribal outca
 
 ### 7. Global Failsafes & History
 *   **Extinction Prevention:** If a gender is critically scarce, "Romeo & Juliet" cross-tribe mating is forced with 100% success.
-*   **Milestones:** Major events (First Blood, Plagues, Crashes) are logged in the **History Track**.
-*   **Demographic Evolution:** The simulation records a statistical snapshot of average Strength and Intelligence every **5 years** (300 ticks), including a **Genesis Snapshot** (Year 0).
+*   **Milestones**: Major events (First Blood, Crashes) are logged in the **History Track**.
+*   **Demographic Evolution**: The simulation records a statistical snapshot of average Strength and Intelligence every **5 years** (300 ticks), including a **Genesis Snapshot** (Year 0).
 *   **Final Archiving:** Upon simulation end, these snapshots are rendered into a visual **Trend Graph** (Evolution Chart), and all-time hero records (Strongest/Most Prolific) are archived for review.
 
 

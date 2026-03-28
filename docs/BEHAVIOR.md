@@ -3,7 +3,7 @@
 This document explains the core logic, entity interactions, and emergent behaviors governing the agents in the Mellow Simulator.
 
 ## 1. Core Agent Properties
-- **Demographics:** Gender (Male/Female), Tribe (Red/Blue), Age (Child: 0-11, Teen: 12-17, Adult: 18-49, Elder: 50+)
+- **Demographics:** Gender (Male/Female), Tribe (Red/Blue), Age (Child: 0-11, Teen: 12-17, Adult: 18-59, Elder: 60+)
 - **Physical Attributes:** Strength, Intelligence
 - **Personality Traits:** Personality (Extrovert/Introvert), Fighter, Libido, Charm
 - **Resource Stats:** Hunger (Decays over time, refilled by eating food).
@@ -19,7 +19,7 @@ Agents use a computationally efficient *Data-Oriented Spatial Hash Grid* for O(N
   - **Same Tribe, Opposite Gender:** Attraction depends heavily on their base `Libido`. **Incest Avoidance:** Intelligent agents repel family members (capped at -1.5 force to prevent it from overwhelming other survival needs like food-seeking).
 - **Food Seeking & Hunger Urgency:** If an agent's `Hunger` drops below 70%, they begin tracking nearby food. As hunger worsens, a **quadratic urgency curve** takes over:
   - **Food Attraction** scales from 1× (well-fed) up to **4×** (critically starving), making starving agents aggressively beeline toward food.
-  - **Fear Dampening:** Fear-based steering (fleeing enemies, plague avoidance, survival instinct) is progressively dampened — down to **30%** at critical hunger. A starving agent will push through enemy territory or walk past plague carriers to reach food.
+  - **Fear Dampening:** Fear-based steering (fleeing enemies, survival instinct) is progressively dampened — down to **30%** at critical hunger. A starving agent will push through enemy territory to reach food.
   - **Hierarchy:** When well-fed, fear dominates. When starving, food dominates. In between, they compete naturally.
 
 ## 3. Conflict and War
@@ -34,8 +34,8 @@ Fighting takes a physical toll. Winners don't walk away unscathed.
 
 - **Weariness Gain:** Each kill adds base weariness (default: 12 points), scaled by age:
   - **Teens (12-17):** ×0.4 — young and resilient, barely winded
-  - **Adults (18-49):** ×1.0 — standard fatigue
-  - **Elders (50+):** ×2.0 — fragile, fighting is extremely taxing
+  - **Adults (18-59):** ×1.0 — standard fatigue
+  - **Elders (60+):** ×2.0 — fragile, fighting is extremely taxing
 - **Combat Penalty:** Weariness reduces combat effectiveness by up to 50% at max weariness (100). A weary warrior with 80 STR fights like they have 60.
 - **Natural Recovery:** Weariness recovers passively every tick, again age-dependent:
   - **Teens:** 0.08/tick (fully recover in ~500 ticks from a kill)
@@ -46,16 +46,13 @@ Fighting takes a physical toll. Winners don't walk away unscathed.
 - **Visual Indicator:** A growing orange arc appears around agents whose weariness exceeds 20%, intensifying as fatigue increases.
 
 ## 4. Reproduction and Life Cycles
-- **Initiation:** Triggered when two opposite-gender adults (ages 18-49) collide. Both agents must pass each other's minimum preference checks (`prefMinStrength`, `prefMinIntelligence`, `prefMinSpeed`, `prefPersonality`).
+- **Initiation:** Triggered when two opposite-gender adults (ages 18-59) collide. Both agents must pass each other's minimum preference checks (`prefMinStrength`, `prefMinIntelligence`, `prefMinSpeed`, `prefPersonality`).
 - **Preference Degradation:** As an agent remains single, their rigid partner preferences degrade. Lonely agents constantly lower their standards so they can eventually reproduce.
 - **Mating:** If preferences are met, the probability of successful mating scales with their combined `Libido`. There is a small chance for triplets or twins. Parents then enter a temporary mating cooldown (customizable).
 - **Genetics:** Offspring average their parents' stats with a sudden mutation variance (+/- 15%). Traits like `Charm`, `Libido`, and `Fighter` are also passed down or mutated randomly. 
 - **Incest Penalties:** If agents share a direct parent or are deeply related, reproducing applies a massive 40% penalty to the child's core traits. However, if the tribe is critically underpopulated, agents will prioritize survival over genetics, bypassing the incest penalty entirely.
 
-## 5. Epidemics and Starvation
-- **The Plague:** Triggerable from the "God Toolbar", an infected agent glows green and acts as a carrier. Any interaction radius overlap with an infected agent spreads the plague instantly. Infected agents have a baseline random chance to drop dead every tick.
-  - **Social Distancing:** Highly intelligent agents recognize the visual symptoms of the plague (the green glow) and will apply strong negative steering forces to actively run away from sick individuals.
-- **Starvation:** If `ENABLE_HUNGER` is active, agents passively lose hunger points on every tick (Rate and Tolerance are customizable). If it reaches 0, they starve to death.
+## 5. Starvation
   - **Efficient Metabolism:** Intelligent agents know how to ration their energy. An agent with maximum intelligence passively starves 25% slower than lower-tier members.
   - **Proximity Braking:** Hungry agents (below 50% hunger) automatically slow down when within 40px of food, preventing them from overshooting the eat radius.
   - **Generous Eat Radius:** Agents consume food within `radius + 15` pixels (previously `radius + 5`), significantly reducing food flyover.
@@ -92,7 +89,7 @@ Civilizations that become too successful often fall from within through a psycho
 
 ## 9. Civilization History & Evolution Graph
 The simulation is no longer just a series of dots—it is a story with a visual lineage.
-- **Milestones:** Significant events (First Blood, Plagues, Crashes) are recorded in a chronological "History Track".
+- **Milestones:** Significant events (First Blood, Crashes) are recorded in a chronological "History Track".
 - **Demographic Evolution Graph:** Every **5 years** (300 ticks), the simulation logs the current average Strength and Intelligence. Upon simulation end, these are rendered into a visual **Trend Chart**.
 - **Genesis Snapshot:** A "Year 0" record is always preserved to ensure the graph shows the full evolutionary journey of the first settlers.
 - **All-Time Records:** The archive preserves the strongest and most prolific heroes globally, ensuring their legacy persists even after total extinction.

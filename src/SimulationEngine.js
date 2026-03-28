@@ -2,9 +2,6 @@ import { CONFIG, GENDER } from './config.js?v=123456';
 
 export class SimulationEngine {
     constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
-
         this.isPaused = false;
         this.selectedAgentId = null;
         this.isGameOverFlag = false;
@@ -17,30 +14,274 @@ export class SimulationEngine {
         this.worker = new Worker('./src/worker.js?v=123456', { type: 'module' });
         this.worker.onmessage = this.handleWorkerMessage.bind(this);
 
-        this.bindEvents();
-        this.resize();
+        this.initPhaser(canvasId);
+        this.bindUIEvents();
+    }
 
-        this.loop = this.loop.bind(this);
+    initPhaser(canvasId) {
+        const config = {
+            type: Phaser.WEBGL,
+            width: window.innerWidth,
+            height: window.innerHeight,
+            canvas: document.getElementById(canvasId),
+            backgroundColor: '#0f172a',
+            scene: {
+                preload: this.preload.bind(this),
+                create: this.create.bind(this),
+                update: this.update.bind(this)
+            },
+            fps: {
+                target: 60,
+                forceSetTimeOut: true
+            }
+        };
+
+        this.game = new Phaser.Game(config);
+    }
+
+    preload() {
+        // We'll generate textures programmatically in create
+    }
+
+    create() {
+        this.scene = this.game.scene.scenes[0];
+
+        // Generate procedural textures
+        this.generateTextures();
+
+        // Groups for pooling
+        this.agentSprites = new Map();
+        this.monsterGraphics = new Map(); // Changed to Map of Graphics for wobbly blobs
+        this.foodSprites = [];
+        this.particleSprites = [];
+
+        // Layers
+        this.foodLayer = this.scene.add.layer();
+        this.agentLayer = this.scene.add.layer();
+        this.monsterLayer = this.scene.add.layer();
+        this.particleLayer = this.scene.add.layer();
+        this.uiLayer = this.scene.add.graphics(); // For awareness circles etc.
+
+        // Camera setup
+        this.camera = this.scene.cameras.main;
+        this.setupCameraControls();
+
+        // Selection ring
+        this.selectionRing = this.scene.add.graphics();
+
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    generateTextures() {
+        // Red Male (Square)
+        let graphics = this.scene.make.graphics({ x: 0, y: 0, add: false });
+        graphics.fillStyle(0xef4444);
+        graphics.fillRect(0, 0, 32, 32);
+        graphics.generateTexture('male-red', 32, 32);
+
+        // Blue Male (Square)
+        graphics.clear();
+        graphics.fillStyle(0x3b82f6);
+        graphics.fillRect(0, 0, 32, 32);
+        graphics.generateTexture('male-blue', 32, 32);
+
+        // Red Female (Triangle)
+        graphics.clear();
+        graphics.fillStyle(0xef4444);
+        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
+        graphics.generateTexture('female-red', 32, 32);
+
+        // Blue Female (Triangle)
+        graphics.clear();
+        graphics.fillStyle(0x3b82f6);
+        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
+        graphics.generateTexture('female-blue', 32, 32);
+
+        graphics.clear();
+        graphics.fillStyle(0x9333ea);
+        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
+        graphics.generateTexture('berserk-tri', 32, 32);
+
+        // Monster
+        graphics.clear();
+        graphics.fillStyle(0xffce00);
+        graphics.fillCircle(16, 16, 16);
+        graphics.generateTexture('monster-base', 32, 32);
+
+        // Food
+        graphics.clear();
+        graphics.fillStyle(0xa3e635);
+        graphics.fillCircle(4, 4, 4);
+        graphics.generateTexture('food', 8, 8);
+
+        // Particle
+        graphics.clear();
+        graphics.fillStyle(0xffffff);
+        graphics.fillCircle(2, 2, 2);
+        graphics.generateTexture('particle', 4, 4);
+    }
+
+    setupCameraControls() {
+        this.scene.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+            const zoomSpeed = 0.001;
+            const newZoom = this.camera.zoom - deltaY * zoomSpeed;
+            this.camera.zoom = Phaser.Math.Clamp(newZoom, 0.2, 5);
+        });
+
+        this.scene.input.on('pointermove', (pointer) => {
+            if (pointer.isDown && this.currentGodAction === 'select') {
+                this.camera.scrollX -= (pointer.x - pointer.prevPosition.x) / this.camera.zoom;
+                this.camera.scrollY -= (pointer.y - pointer.prevPosition.y) / this.camera.zoom;
+            }
+        });
     }
 
     handleWorkerMessage(e) {
         const data = e.data;
         if (data.type === 'RENDER') {
             this.renderData = data;
-            // Store a persistent reference so clicks don't get silently ignored when renderData is temporarily consumed
             this.latestAgentBuffer = data.agentBuffer;
         }
     }
 
-    bindEvents() {
-        window.addEventListener('resize', () => this.resize());
+    bindUIEvents() {
+        const canvas = document.getElementById('sim-canvas');
 
-        this.canvas.addEventListener('click', (e) => {
-            if (!this.latestAgentBuffer && this.currentGodAction === 'select') return;
+        // Input handling via Phaser instead of raw DOM
+        // (Wait for scene to be ready)
+        const checkScene = setInterval(() => {
+            if (this.scene) {
+                clearInterval(checkScene);
+                this.bindSceneInput();
+            }
+        }, 100);
 
-            const rect = this.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+        const godBtns = document.querySelectorAll('.btn-god');
+        godBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const target = e.currentTarget;
+                godBtns.forEach(b => b.classList.remove('active'));
+                target.classList.add('active');
+                this.currentGodAction = target.getAttribute('data-action');
+            });
+        });
+
+        const btnPause = document.getElementById('btn-pause');
+        if (btnPause) {
+            btnPause.addEventListener('click', () => {
+                this.isPaused = !this.isPaused;
+                this.setText('btn-pause', this.isPaused ? 'Resume' : 'Pause');
+                this.worker.postMessage({ type: 'PAUSE', isPaused: this.isPaused });
+            });
+        }
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            if (confirm('End the current game and return to the main menu?')) {
+                window.location.reload();
+            }
+        });
+
+        document.getElementById('btn-go-restart').addEventListener('click', () => {
+            window.location.reload();
+        });
+
+        document.getElementById('btn-show-start-dialog').addEventListener('click', () => {
+            this.removeClass('settings-modal', 'hidden');
+            this.setDisplay('start-actions', 'flex');
+        });
+
+        document.getElementById('btn-launch-sim').addEventListener('click', () => {
+            this.launchSimulation();
+        });
+
+        // Settings and Panels logic...
+        document.getElementById('btn-open-settings').addEventListener('click', () => this.removeClass('settings-modal', 'hidden'));
+        document.getElementById('btn-close-settings').addEventListener('click', () => this.addClass('settings-modal', 'hidden'));
+        document.getElementById('settings-backdrop').addEventListener('click', () => this.addClass('settings-modal', 'hidden'));
+
+        const statsPanel = document.getElementById('stats-panel');
+        const btnOpenStats = document.getElementById('btn-open-stats');
+        document.getElementById('btn-close-stats').addEventListener('click', () => {
+            this.addClass('stats-panel', 'hidden');
+            this.removeClass('btn-open-stats', 'hidden');
+        });
+        btnOpenStats.addEventListener('click', () => {
+            this.removeClass('stats-panel', 'hidden');
+            this.addClass('btn-open-stats', 'hidden');
+        });
+
+        const CONFIG_MAP = {
+            'cfg-fighting': 'ENABLE_FIGHTING',
+            'cfg-repro': 'ENABLE_REPRODUCTION',
+            'cfg-aging': 'ENABLE_AGING',
+            'cfg-incest': 'ENABLE_INCEST_PENALTY',
+            'cfg-pref': 'ENABLE_PREF_DEGRADE',
+            'cfg-limit-pop': 'ENABLE_MAX_POPULATION',
+            'cfg-monsters': 'ENABLE_MONSTERS',
+            'cfg-hunger': 'ENABLE_HUNGER',
+            'cfg-weariness': 'ENABLE_COMBAT_WEARINESS',
+            'cfg-show-awareness': 'ENABLE_SHOW_AWARENESS',
+            'cfg-show-interaction': 'ENABLE_SHOW_INTERACTION',
+            'cfg-max-pop': 'MAX_POPULATION',
+            'cfg-mutation': 'MUTATION_RATE',
+            'cfg-awareness-radius': 'AWARENESS_RADIUS',
+            'cfg-interaction-radius': 'INTERACTION_RADIUS',
+            'cfg-max-food': 'MAX_FOOD',
+            'cfg-food-nut': 'FOOD_NUTRITION',
+            'cfg-max-age': 'MAX_AGE',
+            'cfg-ticks-yr': 'TICKS_PER_YEAR',
+            'cfg-speed': 'MAX_SPEED',
+            'cfg-max-hunger': 'MAX_HUNGER',
+            'cfg-starve-rate': 'STARVATION_RATE',
+            'cfg-monster-speed': 'MONSTER_SPEED',
+            'cfg-monster-awareness': 'MONSTER_AWARENESS',
+            'cfg-monster-spawn': 'MONSTER_SPAWN_INTERVAL',
+            'cfg-repro-cooldown': 'REPRODUCTION_COOLDOWN',
+            'cfg-pref-interval': 'PREF_DEGRADE_INTERVAL',
+            'cfg-child-age': 'CHILD_AGE',
+            'cfg-teen-age': 'TEEN_AGE',
+            'cfg-elder-age': 'ELDER_AGE',
+            'cfg-steer': 'STEER_STRENGTH',
+            'cfg-food-attract': 'FOOD_ATTRACTION',
+            'cfg-agent-radius': 'AGENT_RADIUS'
+        };
+
+        const updateConfig = (id, val) => {
+            const key = CONFIG_MAP[id];
+            if (!key) return;
+            CONFIG[key] = val;
+            this.worker.postMessage({ type: 'CONFIG', key, value: val });
+
+            // UI Feedback
+            this.displayEventLog({
+                msg: `Setting Updated: ${key.replace(/_/g, ' ')} = ${val}`,
+                type: 'info'
+            });
+
+            if (key === 'AGENT_RADIUS') {
+                CONFIG['SPRITE_SIZE'] = val;
+                this.worker.postMessage({ type: 'CONFIG', key: 'SPRITE_SIZE', value: val });
+            }
+        };
+
+        const inputs = Object.keys(CONFIG_MAP);
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', e => {
+                    const val = el.type === 'checkbox' ? e.target.checked : parseFloat(e.target.value);
+                    updateConfig(id, val);
+                });
+            }
+        });
+    }
+
+    bindSceneInput() {
+        this.scene.input.on('pointerdown', (pointer) => {
+            // Convert screen pointer coordinates to world coordinates (to account for zoom/pan)
+            const worldPoint = this.camera.getWorldPoint(pointer.x, pointer.y);
+            const mouseX = worldPoint.x;
+            const mouseY = worldPoint.y;
 
             if (this.currentGodAction !== 'select') {
                 this.worker.postMessage({
@@ -52,11 +293,11 @@ export class SimulationEngine {
                 return;
             }
 
-            const clickRadius = Math.max(CONFIG.SPRITE_SIZE * 2.5, 40); // Much more generous click area for fast-moving targets
-            const sqRadius = clickRadius * clickRadius;
-
+            // Selection logic
             if (!this.latestAgentBuffer) return;
             const aBuffer = new Float32Array(this.latestAgentBuffer);
+            const clickRadius = Math.max(CONFIG.SPRITE_SIZE * 2.5, 40);
+            const sqRadius = clickRadius * clickRadius;
 
             let clickedId = null;
             for (let i = 0; i < aBuffer.length; i += 10) {
@@ -74,444 +315,127 @@ export class SimulationEngine {
 
             if (clickedId !== null) {
                 this.selectedAgentId = clickedId;
-                document.getElementById('entity-stats-panel').classList.remove('hidden');
+                this.removeClass('entity-stats-panel', 'hidden');
                 this.worker.postMessage({ type: 'SELECT', id: clickedId });
             } else {
                 this.selectedAgentId = null;
-                document.getElementById('entity-stats-panel').classList.add('hidden');
+                this.addClass('entity-stats-panel', 'hidden');
                 this.worker.postMessage({ type: 'SELECT', id: null });
             }
         });
+    }
 
-        const godBtns = document.querySelectorAll('.btn-god');
-        godBtns.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = e.currentTarget;
-                godBtns.forEach(b => b.classList.remove('active'));
-                target.classList.add('active');
-                this.currentGodAction = target.getAttribute('data-action');
-            });
-        });
-
-        document.getElementById('btn-pause').addEventListener('click', (e) => {
-            this.isPaused = !this.isPaused;
-            e.target.innerText = this.isPaused ? 'Resume' : 'Pause';
-            this.worker.postMessage({ type: 'PAUSE', isPaused: this.isPaused });
-        });
-
-        document.getElementById('btn-reset').addEventListener('click', () => {
-            this.reset();
-        });
-        document.getElementById('btn-go-restart').addEventListener('click', () => {
-            this.reset();
-            this.isPaused = false;
-            this.worker.postMessage({ type: 'PAUSE', isPaused: false });
-        });
-
-        // Start screen logic
-        document.getElementById('btn-show-start-dialog').addEventListener('click', () => {
-            document.getElementById('settings-modal').classList.remove('hidden');
-            document.getElementById('start-actions').style.display = 'flex';
-        });
-
-        document.getElementById('btn-launch-sim').addEventListener('click', () => {
-            const updates = {
-                INITIAL_RED_MALES: parseInt(document.getElementById('cfg-init-red-males').value) || 0,
-                INITIAL_RED_FEMALES: parseInt(document.getElementById('cfg-init-red-females').value) || 0,
-                INITIAL_BLUE_MALES: parseInt(document.getElementById('cfg-init-blue-males').value) || 0,
-                INITIAL_BLUE_FEMALES: parseInt(document.getElementById('cfg-init-blue-females').value) || 0,
-                AWARENESS_RADIUS: parseInt(document.getElementById('cfg-awareness-radius').value) || 200,
-                INTERACTION_RADIUS: parseInt(document.getElementById('cfg-interaction-radius').value) || 25,
-                ENABLE_SHOW_AWARENESS: document.getElementById('cfg-show-awareness').checked,
-                ENABLE_SHOW_INTERACTION: document.getElementById('cfg-show-interaction').checked,
-
-                MAX_FOOD: parseInt(document.getElementById('cfg-max-food').value) || 250,
-                FOOD_NUTRITION: parseInt(document.getElementById('cfg-food-nut').value) || 1500,
-                ENABLE_TRIBES: document.getElementById('cfg-tribes').checked,
-                ENABLE_HUNGER: document.getElementById('cfg-hunger').checked,
-                MAX_AGE: parseInt(document.getElementById('cfg-max-age').value) || 75,
-                TICKS_PER_YEAR: parseInt(document.getElementById('cfg-ticks-yr').value) || 60,
-                MAX_SPEED: parseFloat(document.getElementById('cfg-speed').value) || 0.5,
-
-                ENABLE_FIGHTING: document.getElementById('cfg-fighting').checked,
-                ENABLE_REPRODUCTION: document.getElementById('cfg-repro').checked,
-                ENABLE_AGING: document.getElementById('cfg-aging').checked,
-                ENABLE_INCEST_PENALTY: document.getElementById('cfg-incest').checked,
-                ENABLE_PREF_DEGRADE: document.getElementById('cfg-pref').checked,
-                ENABLE_MAX_POPULATION: document.getElementById('cfg-limit-pop').checked,
-                MAX_POPULATION: parseInt(document.getElementById('cfg-max-pop').value) || 300,
-                MUTATION_RATE: parseFloat(document.getElementById('cfg-mutation').value) || 0.15,
-                ENABLE_COMBAT_WEARINESS: document.getElementById('cfg-weariness').checked,
-                ENABLE_MONSTERS: document.getElementById('cfg-monsters').checked,
-                INITIAL_MONSTERS: parseInt(document.getElementById('cfg-init-monsters').value) || 2,
-
-                // New Settings
-                INITIAL_MIN_AGE: parseInt(document.getElementById('cfg-init-age-min').value) || 18,
-                INITIAL_MAX_AGE: parseInt(document.getElementById('cfg-init-age-max').value) || 30,
-                MAX_HUNGER: parseInt(document.getElementById('cfg-max-hunger').value) || 3000,
-                STARVATION_RATE: parseFloat(document.getElementById('cfg-starve-rate').value) || 1,
-                MONSTER_SPEED: parseFloat(document.getElementById('cfg-monster-speed').value) || 0.45,
-                MONSTER_AWARENESS: parseInt(document.getElementById('cfg-monster-awareness').value) || 600,
-                MONSTER_SPAWN_INTERVAL: parseInt(document.getElementById('cfg-monster-spawn').value) || 1800,
-                REPRODUCTION_COOLDOWN: parseInt(document.getElementById('cfg-repro-cooldown').value) || 100,
-                PREF_DEGRADE_INTERVAL: parseInt(document.getElementById('cfg-pref-interval').value) || 150,
-                CHILD_AGE: parseInt(document.getElementById('cfg-child-age').value) || 12,
-                TEEN_AGE: parseInt(document.getElementById('cfg-teen-age').value) || 18,
-                ELDER_AGE: parseInt(document.getElementById('cfg-elder-age').value) || 60,
-                STEER_STRENGTH: parseFloat(document.getElementById('cfg-steer').value) || 0.04,
-                FOOD_ATTRACTION: parseFloat(document.getElementById('cfg-food-attract').value) || 0.15,
-                AGENT_RADIUS: parseInt(document.getElementById('cfg-agent-radius').value) || 15,
-                SPRITE_SIZE: parseInt(document.getElementById('cfg-agent-radius').value) || 15
-            };
-
-            for (const [key, value] of Object.entries(updates)) {
-                CONFIG[key] = value;
-                this.worker.postMessage({ type: 'CONFIG', key, value });
-            }
-
-            this.worker.postMessage({
-                type: 'INIT',
-                width: this.canvas.width,
-                height: this.canvas.height
-            });
-
-            document.getElementById('settings-modal').classList.add('hidden');
-            document.getElementById('start-screen').style.display = 'none';
-            document.getElementById('start-actions').style.display = 'none';
-
-            // Re-hide init state fields after start
-            document.getElementById('row-init-red-males').style.display = 'none';
-            document.getElementById('row-init-red-females').style.display = 'none';
-            document.getElementById('row-init-blue-males').style.display = 'none';
-            document.getElementById('row-init-blue-females').style.display = 'none';
-            document.getElementById('row-init-age').style.display = 'none';
-            document.getElementById('row-init-monsters').style.display = 'none';
-            document.getElementById('monster-extra-settings').style.display = 'none';
-        });
-
-        // Modal logic
-        const settingsModal = document.getElementById('settings-modal');
-        document.getElementById('btn-open-settings').addEventListener('click', () => {
-            settingsModal.classList.remove('hidden');
-        });
-        document.getElementById('btn-close-settings').addEventListener('click', () => {
-            settingsModal.classList.add('hidden');
-        });
-        document.getElementById('settings-backdrop').addEventListener('click', () => {
-            settingsModal.classList.add('hidden');
-        });
-
-        // Demographics panel logic
-        const statsPanel = document.getElementById('stats-panel');
-        const btnOpenStats = document.getElementById('btn-open-stats');
-        document.getElementById('btn-close-stats').addEventListener('click', () => {
-            statsPanel.classList.add('hidden');
-            btnOpenStats.classList.remove('hidden');
-        });
-        btnOpenStats.addEventListener('click', () => {
-            statsPanel.classList.remove('hidden');
-            btnOpenStats.classList.add('hidden');
-        });
-
-        const updateConfig = (key, val) => {
-            CONFIG[key] = val;
-            this.worker.postMessage({ type: 'CONFIG', key, value: val });
+    launchSimulation() {
+        const updates = {
+            INITIAL_RED_MALES: parseInt(this.getVal('cfg-init-red-males')) || 0,
+            INITIAL_RED_FEMALES: parseInt(this.getVal('cfg-init-red-females')) || 0,
+            INITIAL_BLUE_MALES: parseInt(this.getVal('cfg-init-blue-males')) || 0,
+            INITIAL_BLUE_FEMALES: parseInt(this.getVal('cfg-init-blue-females')) || 0,
+            AWARENESS_RADIUS: parseInt(this.getVal('cfg-awareness-radius')) || 200,
+            INTERACTION_RADIUS: parseInt(this.getVal('cfg-interaction-radius')) || 25,
+            ENABLE_SHOW_AWARENESS: this.isChecked('cfg-show-awareness'),
+            ENABLE_SHOW_INTERACTION: this.isChecked('cfg-show-interaction'),
+            MAX_FOOD: parseInt(this.getVal('cfg-max-food')) || 250,
+            FOOD_NUTRITION: parseInt(this.getVal('cfg-food-nut')) || 1500,
+            ENABLE_TRIBES: this.isChecked('cfg-tribes'),
+            ENABLE_HUNGER: this.isChecked('cfg-hunger'),
+            MAX_AGE: parseInt(this.getVal('cfg-max-age')) || 75,
+            TICKS_PER_YEAR: parseInt(this.getVal('cfg-ticks-yr')) || 60,
+            MAX_SPEED: parseFloat(this.getVal('cfg-speed')) || 0.5,
+            ENABLE_FIGHTING: this.isChecked('cfg-fighting'),
+            ENABLE_REPRODUCTION: this.isChecked('cfg-repro'),
+            ENABLE_AGING: this.isChecked('cfg-aging'),
+            ENABLE_INCEST_PENALTY: this.isChecked('cfg-incest'),
+            ENABLE_PREF_DEGRADE: this.isChecked('cfg-pref'),
+            ENABLE_MAX_POPULATION: this.isChecked('cfg-limit-pop'),
+            MAX_POPULATION: parseInt(this.getVal('cfg-max-pop')) || 300,
+            MUTATION_RATE: parseFloat(this.getVal('cfg-mutation')) || 0.15,
+            ENABLE_COMBAT_WEARINESS: this.isChecked('cfg-weariness'),
+            ENABLE_MONSTERS: this.isChecked('cfg-monsters'),
+            INITIAL_MONSTERS: parseInt(this.getVal('cfg-init-monsters')) || 2,
+            INITIAL_MIN_AGE: parseInt(this.getVal('cfg-init-age-min')) || 18,
+            INITIAL_MAX_AGE: parseInt(this.getVal('cfg-init-age-max')) || 30,
+            MAX_HUNGER: parseInt(this.getVal('cfg-max-hunger')) || 3000,
+            STARVATION_RATE: parseFloat(this.getVal('cfg-starve-rate')) || 1,
+            MONSTER_SPEED: parseFloat(this.getVal('cfg-monster-speed')) || 0.45,
+            MONSTER_AWARENESS: parseInt(this.getVal('cfg-monster-awareness')) || 600,
+            MONSTER_SPAWN_INTERVAL: parseInt(this.getVal('cfg-monster-spawn')) || 1800,
+            REPRODUCTION_COOLDOWN: parseInt(this.getVal('cfg-repro-cooldown')) || 100,
+            PREF_DEGRADE_INTERVAL: parseInt(this.getVal('cfg-pref-interval')) || 150,
+            CHILD_AGE: parseInt(this.getVal('cfg-child-age')) || 12,
+            TEEN_AGE: parseInt(this.getVal('cfg-teen-age')) || 18,
+            ELDER_AGE: parseInt(this.getVal('cfg-elder-age')) || 60,
+            STEER_STRENGTH: parseFloat(this.getVal('cfg-steer')) || 0.04,
+            FOOD_ATTRACTION: parseFloat(this.getVal('cfg-food-attract')) || 0.15,
+            AGENT_RADIUS: parseInt(this.getVal('cfg-agent-radius')) || 15,
+            SPRITE_SIZE: parseInt(this.getVal('cfg-agent-radius')) || 15
         };
 
-        // Settings bindings
-        document.getElementById('cfg-fighting').addEventListener('change', e => updateConfig('ENABLE_FIGHTING', e.target.checked));
-        document.getElementById('cfg-repro').addEventListener('change', e => updateConfig('ENABLE_REPRODUCTION', e.target.checked));
-        document.getElementById('cfg-aging').addEventListener('change', e => updateConfig('ENABLE_AGING', e.target.checked));
-        document.getElementById('cfg-incest').addEventListener('change', e => updateConfig('ENABLE_INCEST_PENALTY', e.target.checked));
-        document.getElementById('cfg-pref').addEventListener('change', e => updateConfig('ENABLE_PREF_DEGRADE', e.target.checked));
-        document.getElementById('cfg-limit-pop').addEventListener('change', e => updateConfig('ENABLE_MAX_POPULATION', e.target.checked));
+        for (const [key, value] of Object.entries(updates)) {
+            CONFIG[key] = value;
+            this.worker.postMessage({ type: 'CONFIG', key, value });
+        }
 
-        document.getElementById('cfg-max-pop').addEventListener('change', e => updateConfig('MAX_POPULATION', parseInt(e.target.value)));
-        document.getElementById('cfg-mutation').addEventListener('change', e => updateConfig('MUTATION_RATE', parseFloat(e.target.value)));
-        document.getElementById('cfg-awareness-radius').addEventListener('change', e => updateConfig('AWARENESS_RADIUS', parseInt(e.target.value)));
-        document.getElementById('cfg-show-awareness').addEventListener('change', e => updateConfig('ENABLE_SHOW_AWARENESS', e.target.checked));
-        document.getElementById('cfg-interaction-radius').addEventListener('change', e => updateConfig('INTERACTION_RADIUS', parseInt(e.target.value)));
-        document.getElementById('cfg-show-interaction').addEventListener('change', e => updateConfig('ENABLE_SHOW_INTERACTION', e.target.checked));
-
-        // New Settings bindings
-        document.getElementById('cfg-monsters').addEventListener('change', e => updateConfig('ENABLE_MONSTERS', e.target.checked));
-        document.getElementById('cfg-max-food').addEventListener('change', e => updateConfig('MAX_FOOD', parseInt(e.target.value)));
-        document.getElementById('cfg-food-nut').addEventListener('change', e => updateConfig('FOOD_NUTRITION', parseInt(e.target.value)));
-        document.getElementById('cfg-tribes').addEventListener('change', e => updateConfig('ENABLE_TRIBES', e.target.checked));
-        document.getElementById('cfg-hunger').addEventListener('change', e => updateConfig('ENABLE_HUNGER', e.target.checked));
-        document.getElementById('cfg-max-age').addEventListener('change', e => updateConfig('MAX_AGE', parseInt(e.target.value)));
-        document.getElementById('cfg-ticks-yr').addEventListener('change', e => updateConfig('TICKS_PER_YEAR', parseInt(e.target.value)));
-        document.getElementById('cfg-speed').addEventListener('change', e => updateConfig('MAX_SPEED', parseFloat(e.target.value)));
-        document.getElementById('cfg-weariness').addEventListener('change', e => updateConfig('ENABLE_COMBAT_WEARINESS', e.target.checked));
-
-        // New Settings real-time bindings
-        document.getElementById('cfg-max-hunger').addEventListener('change', e => updateConfig('MAX_HUNGER', parseInt(e.target.value)));
-        document.getElementById('cfg-starve-rate').addEventListener('change', e => updateConfig('STARVATION_RATE', parseFloat(e.target.value)));
-        document.getElementById('cfg-monster-speed').addEventListener('change', e => updateConfig('MONSTER_SPEED', parseFloat(e.target.value)));
-        document.getElementById('cfg-monster-awareness').addEventListener('change', e => updateConfig('MONSTER_AWARENESS', parseInt(e.target.value)));
-        document.getElementById('cfg-monster-spawn').addEventListener('change', e => updateConfig('MONSTER_SPAWN_INTERVAL', parseInt(e.target.value)));
-        document.getElementById('cfg-repro-cooldown').addEventListener('change', e => updateConfig('REPRODUCTION_COOLDOWN', parseInt(e.target.value)));
-        document.getElementById('cfg-pref-interval').addEventListener('change', e => updateConfig('PREF_DEGRADE_INTERVAL', parseInt(e.target.value)));
-        document.getElementById('cfg-child-age').addEventListener('change', e => updateConfig('CHILD_AGE', parseInt(e.target.value)));
-        document.getElementById('cfg-teen-age').addEventListener('change', e => updateConfig('TEEN_AGE', parseInt(e.target.value)));
-        document.getElementById('cfg-elder-age').addEventListener('change', e => updateConfig('ELDER_AGE', parseInt(e.target.value)));
-        document.getElementById('cfg-steer').addEventListener('change', e => updateConfig('STEER_STRENGTH', parseFloat(e.target.value)));
-        document.getElementById('cfg-food-attract').addEventListener('change', e => updateConfig('FOOD_ATTRACTION', parseFloat(e.target.value)));
-        document.getElementById('cfg-agent-radius').addEventListener('change', e => {
-            const val = parseInt(e.target.value);
-            updateConfig('AGENT_RADIUS', val);
-            updateConfig('SPRITE_SIZE', val);
+        this.worker.postMessage({
+            type: 'INIT',
+            width: window.innerWidth * 2, // Larger world than viewport
+            height: window.innerHeight * 2
         });
+
+        this.addClass('settings-modal', 'hidden');
+        this.setDisplay('start-screen', 'none');
+        this.setDisplay('start-actions', 'none');
+
+        // Hide init rows
+        ['row-init-red-males', 'row-init-red-females', 'row-init-blue-males', 'row-init-blue-females', 'row-init-age', 'row-init-monsters', 'monster-extra-settings'].forEach(id => {
+            this.setDisplay(id, 'none');
+        });
+
+        // Center camera initially
+        if (this.camera) this.camera.centerOn(window.innerWidth, window.innerHeight);
     }
 
     resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-        this.worker.postMessage({ type: 'RESIZE', width: this.canvas.width, height: this.canvas.height });
+        if (this.game) {
+            this.game.scale.resize(window.innerWidth, window.innerHeight);
+            this.worker.postMessage({ type: 'RESIZE', width: window.innerWidth * 2, height: window.innerHeight * 2 });
+        }
     }
 
     reset() {
         this.selectedAgentId = null;
         this.isGameOverFlag = false;
-        document.getElementById('entity-stats-panel').classList.add('hidden');
-        document.getElementById('game-over-modal').classList.add('hidden');
+        this.isPaused = true;
+        this.setText('stat-years', 0);
+        this.addClass('entity-stats-panel', 'hidden');
+        this.addClass('game-over-modal', 'hidden');
         this.worker.postMessage({ type: 'RESET' });
-    }
 
-    updateUI(data) {
-        document.getElementById('stat-population').innerText = data.demographics.pop;
-        document.getElementById('stat-males').innerText = data.demographics.males;
-        document.getElementById('stat-females').innerText = data.demographics.females;
-        document.getElementById('stat-introverts').innerText = data.demographics.intro;
-        document.getElementById('stat-extroverts').innerText = data.demographics.extro;
-        document.getElementById('stat-incest-current').innerText = data.demographics.incest;
-
-        document.getElementById('stat-infected').innerText = data.demographics.infectedCount;
-        document.getElementById('stat-food').innerText = data.demographics.foodCount;
-
-        document.getElementById('stat-tribe-red').innerText = data.demographics.tribeRed;
-        document.getElementById('stat-tribe-blue').innerText = data.demographics.tribeBlue;
-        document.getElementById('stat-monsters').innerText = data.demographics.monsterCount || 0;
-        if (document.getElementById('stat-monster-births')) {
-            document.getElementById('stat-monster-births').innerText = data.stats.monster_births || 0;
-            document.getElementById('stat-monster-fights').innerText = data.stats.monster_fights || 0;
-            document.getElementById('stat-monster-deaths').innerText = data.stats.monster_deaths || 0;
+        // Clear all sprites with safety checks
+        if (this.agentSprites) {
+            this.agentSprites.forEach(s => s.destroy());
+            this.agentSprites.clear();
         }
-
-        document.getElementById('stat-encounters').innerText = data.stats.encounters;
-        document.getElementById('stat-kills').innerText = data.stats.kills;
-        document.getElementById('stat-repros').innerText = data.stats.repros;
-        document.getElementById('stat-born').innerText = data.stats.born;
-        document.getElementById('stat-incest-total').innerText = data.stats.incest_born;
-        document.getElementById('stat-natural-deaths').innerText = data.stats.natural_deaths;
-        document.getElementById('stat-exhaustion-deaths').innerText = data.stats.exhaustion_deaths || 0;
-
-        // World clock
-        const worldYear = Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR);
-        document.getElementById('world-clock').innerText = `Year ${worldYear}`;
-    }
-
-    drawFrame(data) {
-        this.ctx.fillStyle = CONFIG.BG_COLOR;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        const aBuffer = new Float32Array(data.agentBuffer);
-
-        for (let i = 0; i < aBuffer.length; i += 10) {
-            const id = aBuffer[i];
-            const x = aBuffer[i + 1];
-            const y = aBuffer[i + 2];
-            const s = aBuffer[i + 3]; // Size/radius
-            const isFemale = aBuffer[i + 4] === 1;
-            const tInt = aBuffer[i + 5];
-            const isInfected = aBuffer[i + 6] === 1;
-            const isBerserk = aBuffer[i + 9] === 1;
-
-            let color = '#ef4444'; // Red default
-            if (tInt === 1) color = '#3b82f6';
-
-            const h = s / 2;
-
-            this.ctx.save();
-
-            // Render Bloom/Glow
-            if (isBerserk) {
-                const pulse = 10 + Math.sin(Date.now() / 150) * 15;
-                this.ctx.shadowBlur = pulse;
-                this.ctx.shadowColor = '#9333ea'; // Purple-600 (Vibrant Purple)
-                this.ctx.fillStyle = '#581c87'; // Purple-900 (Deep/Dark Purple)
-            } else {
-                this.ctx.shadowBlur = isInfected ? 20 : 10;
-                this.ctx.shadowColor = isInfected ? '#84cc16' : color;
-                this.ctx.fillStyle = color;
-            }
-
-            if (isInfected && !isBerserk) {
-                // Pulse effect or sick color overwrite
-                this.ctx.globalAlpha = 0.8;
-                this.ctx.fillStyle = '#84cc16';
-            }
-
-            if (!isFemale) {
-                this.ctx.fillRect(x - h, y - h, s, s);
-            } else {
-                this.ctx.beginPath();
-                this.ctx.moveTo(x, y - h);
-                this.ctx.lineTo(x + h, y + h);
-                this.ctx.lineTo(x - h, y + h);
-                this.ctx.closePath();
-                this.ctx.fill();
-            }
-            this.ctx.restore();
-
-            // Draw dim awareness glow
-            if (CONFIG.ENABLE_SHOW_AWARENESS) {
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, CONFIG.AWARENESS_RADIUS, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.01)';
-                this.ctx.fill();
-            }
-
-            // Draw dim interaction ring
-            if (CONFIG.ENABLE_SHOW_INTERACTION) {
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, CONFIG.INTERACTION_RADIUS, 0, Math.PI * 2);
-                this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-                this.ctx.stroke();
-            }
-
-            // Draw hunger indicator
-            if (CONFIG.ENABLE_HUNGER) {
-                const hungerRatio = Math.max(0, Math.min(1, aBuffer[i + 7]));
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, h + 5, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * hungerRatio));
-                const r = Math.floor(255 * (1 - hungerRatio));
-                const g = Math.floor(255 * hungerRatio);
-                this.ctx.strokeStyle = `rgb(${r}, ${g}, 0)`;
-                this.ctx.lineWidth = 1.5;
-                this.ctx.stroke();
-            }
-
-            // Draw weariness indicator (orange arc, only visible when > 20%)
-            if (CONFIG.ENABLE_COMBAT_WEARINESS) {
-                const wearinessRatio = Math.max(0, Math.min(1, aBuffer[i + 8]));
-                if (wearinessRatio > 0.2) {
-                    this.ctx.beginPath();
-                    this.ctx.arc(x, y, h + 8, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * wearinessRatio));
-                    const orangeAlpha = 0.3 + wearinessRatio * 0.7; // Fades in as weariness increases
-                    this.ctx.strokeStyle = `rgba(251, 146, 60, ${orangeAlpha})`; // orange-400
-                    this.ctx.lineWidth = 1.5;
-                    this.ctx.stroke();
-                }
-            }
-
-            if (this.selectedAgentId !== null && this.selectedAgentId === id) {
-                this.ctx.beginPath();
-                this.ctx.arc(x, y, h + 11, 0, Math.PI * 2);
-                this.ctx.strokeStyle = '#fbbf24';
-                this.ctx.lineWidth = 2;
-                this.ctx.stroke();
-                this.ctx.closePath();
-            }
+        if (this.monsterGraphics) {
+            this.monsterGraphics.forEach(s => s.destroy());
+            this.monsterGraphics.clear();
         }
-
-        if (data.foodBuffer) {
-            const fBuffer = new Float32Array(data.foodBuffer);
-            this.ctx.fillStyle = '#a3e635'; // Food color
-            for (let i = 0; i < fBuffer.length; i += 2) {
-                const fx = fBuffer[i];
-                const fy = fBuffer[i + 1];
-                this.ctx.beginPath();
-                this.ctx.arc(fx, fy, 3, 0, Math.PI * 2);
-                this.ctx.fill();
-            }
+        if (this.foodSprites) {
+            this.foodSprites.forEach(s => s && s.destroy ? s.destroy() : null);
+            this.foodSprites = [];
         }
-
-        const pBuffer = new Float32Array(data.particleBuffer);
-        for (let i = 0; i < pBuffer.length; i += 4) {
-            const px = pBuffer[i];
-            const py = pBuffer[i + 1];
-            const alpha = pBuffer[i + 2];
-            const cType = pBuffer[i + 3];
-
-            let pColor = '#ffffff';
-            if (cType === 1) pColor = '#ef4444';
-            else if (cType === 3) pColor = '#94a3b8';
-            else if (cType === 4) pColor = '#f472b6'; // Potion pink
-            else if (cType === 5) pColor = '#fbbf24'; // Yellow spark
-
-            this.ctx.globalAlpha = Math.max(0, alpha);
-            this.ctx.fillStyle = pColor;
-            this.ctx.beginPath();
-            this.ctx.arc(px, py, 2, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.globalAlpha = 1.0;
-        }
-
-        if (data.monsterBuffer) {
-            const mBuffer = new Float32Array(data.monsterBuffer);
-            for (let i = 0; i < mBuffer.length; i += 5) {
-                const mx = mBuffer[i];
-                const my = mBuffer[i + 1];
-                const mr = mBuffer[i + 2];
-                const hpRatio = mBuffer[i + 3];
-                const hungerRatio = mBuffer[i + 4]; this.ctx.save();
-                this.ctx.shadowBlur = 10;
-                this.ctx.shadowColor = '#FF7400'; // Amber Glow
-                this.ctx.fillStyle = '#FFCE00'; // Gold Body
-
-                // Draw irregular blob shape
-                this.ctx.beginPath();
-                const points = 16;
-                for (let j = 0; j <= points; j++) {
-                    const angle = (j / points) * Math.PI * 2;
-                    // Use sinusoidal offsets with integer multipliers to ensure shape connects seamlessly at 0 and 2pi
-                    const offset = Math.sin(angle * 5) * (mr * 0.15) + Math.cos(angle * 4 + mx) * (mr * 0.2);
-                    const rad = mr + offset;
-
-                    const px = mx + Math.cos(angle) * rad;
-                    const py = my + Math.sin(angle) * rad;
-                    if (j === 0) this.ctx.moveTo(px, py);
-                    else this.ctx.lineTo(px, py);
-                }
-                this.ctx.closePath();
-                this.ctx.fill();
-
-                // Clear shadow for UI elements so they don't glow
-                this.ctx.shadowBlur = 0;
-
-                // Hunger Arc (Draw around monster, completely clearing the wobbly blob body)
-                if (CONFIG.ENABLE_HUNGER && hungerRatio < 1.0) {
-                    this.ctx.beginPath();
-                    this.ctx.arc(mx, my, mr * 1.45, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.max(0, Math.min(1, hungerRatio))));
-                    const rgbR = Math.floor(255 * (1 - hungerRatio));
-                    const rgbG = Math.floor(255 * hungerRatio);
-                    this.ctx.strokeStyle = `rgba(${rgbR}, ${rgbG}, 0, 0.8)`;
-                    this.ctx.lineWidth = 4;
-                    this.ctx.lineCap = 'round';
-                    this.ctx.stroke();
-                }
-
-                // HP Bar (Draw cleanly above the hunger arc)
-                if (hpRatio < 1.0) {
-                    const barWidth = mr * 2.2;
-                    this.ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
-                    this.ctx.fillRect(mx - barWidth / 2, my - mr * 1.45 - 12, barWidth, 5);
-                    this.ctx.fillStyle = '#10b981';
-                    this.ctx.fillRect(mx - barWidth / 2, my - mr * 1.45 - 12, barWidth * hpRatio, 5);
-                }
-
-                this.ctx.restore();
-            }
+        if (this.particleSprites) {
+            this.particleSprites.forEach(s => s && s.destroy ? s.destroy() : null);
+            this.particleSprites = [];
         }
     }
 
-    loop() {
+    update() {
         if (!this.isPaused && this.renderData) {
             const data = this.renderData;
-            this.renderData = null; // Consume frame data
+            this.renderData = null;
 
-            this.drawFrame(data);
+            this.renderFramePhaser(data);
             this.updateUI(data);
 
             if (data.events && data.events.length > 0) {
@@ -521,7 +445,7 @@ export class SimulationEngine {
             if (data.selectedAgent) {
                 if (data.selectedAgent.dead) {
                     this.selectedAgentId = null;
-                    document.getElementById('entity-stats-panel').classList.add('hidden');
+                    this.addClass('entity-stats-panel', 'hidden');
                 } else {
                     this.updateEntityStatsPanel(data.selectedAgent);
                 }
@@ -529,8 +453,292 @@ export class SimulationEngine {
 
             this.checkGameOver(data);
         }
+    }
 
-        requestAnimationFrame(this.loop);
+    renderFramePhaser(data) {
+        if (!this.scene) return;
+
+        this.uiLayer.clear();
+        this.selectionRing.clear();
+
+        // --- AGENTS ---
+        const aBuffer = new Float32Array(data.agentBuffer);
+        const activeIds = new Set();
+
+        for (let i = 0; i < aBuffer.length; i += 10) {
+            const id = aBuffer[i];
+            const x = aBuffer[i + 1];
+            const y = aBuffer[i + 2];
+            const s = aBuffer[i + 3];
+            const isFemale = aBuffer[i + 4] === 1;
+            const tInt = aBuffer[i + 5];
+            // skip i+6 (padding)
+            const hungerRatio = aBuffer[i + 7];
+            const wearinessRatio = aBuffer[i + 8];
+            const isBerserk = aBuffer[i + 9] === 1;
+
+            activeIds.add(id);
+
+            let sprite = this.agentSprites.get(id);
+            if (!sprite) {
+                let texture = 'male-red';
+                if (isFemale) texture = tInt === 0 ? 'female-red' : 'female-blue';
+                else texture = tInt === 0 ? 'male-red' : 'male-blue';
+
+                sprite = this.scene.add.sprite(x, y, texture);
+                this.agentLayer.add(sprite);
+                this.agentSprites.set(id, sprite);
+            }
+
+            // Update texture based on state
+            let targetTexture = '';
+            if (isBerserk) targetTexture = isFemale ? 'berserk-tri' : 'berserk-sq';
+            else {
+                if (isFemale) targetTexture = tInt === 0 ? 'female-red' : 'female-blue';
+                else targetTexture = tInt === 0 ? 'male-red' : 'male-blue';
+            }
+
+            if (sprite.texture.key !== targetTexture) sprite.setTexture(targetTexture);
+
+            sprite.setPosition(x, y);
+            sprite.setDisplaySize(s, s);
+
+            // Glow Effects
+            if (isBerserk) {
+                // Phaser 3.60: Use preFX and manage specific effects manually or check for active flags
+                // To avoid repeated 'find' calls (which don't exist in that API), we use a flag on the sprite
+                if (sprite.lastFx !== 'berserk') {
+                    sprite.preFX.clear();
+                    sprite.preFX.addGlow(0xa855f7, 4, 1);
+                    sprite.lastFx = 'berserk';
+                }
+                const pulse = 0.5 + Math.sin(Date.now() / 150) * 0.5;
+                sprite.setAlpha(0.8 + pulse * 0.2);
+            } else {
+                if (sprite.lastFx) {
+                    sprite.preFX.clear();
+                    sprite.lastFx = null;
+                }
+                sprite.setAlpha(1);
+            }
+
+            // Selection ring
+            if (this.selectedAgentId === id) {
+                const pulse = 1 + Math.sin(Date.now() / 200) * 0.2;
+                this.selectionRing.lineStyle(2, 0xfbbf24, 0.8 * pulse);
+                this.selectionRing.strokeCircle(x, y, s / 2 + 10 * pulse);
+            }
+
+            // Indicators (Draw on UI Layer for simplicity, or use specific GameObjects)
+            if (CONFIG.ENABLE_HUNGER) {
+                const r = Math.floor(255 * (1 - hungerRatio));
+                const g = Math.floor(255 * hungerRatio);
+                const color = (r << 16) | (g << 8);
+                this.uiLayer.lineStyle(2, color, 0.8);
+                this.uiLayer.beginPath();
+                this.uiLayer.arc(x, y, s / 2 + 4, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + (360 * hungerRatio)), false);
+                this.uiLayer.strokePath();
+            }
+
+            if (CONFIG.ENABLE_COMBAT_WEARINESS && wearinessRatio > 0.2) {
+                this.uiLayer.lineStyle(2, 0xfb923c, 0.3 + wearinessRatio * 0.7);
+                this.uiLayer.beginPath();
+                this.uiLayer.arc(x, y, s / 2 + 7, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + (360 * wearinessRatio)), false);
+                this.uiLayer.strokePath();
+            }
+
+            if (CONFIG.ENABLE_SHOW_AWARENESS) {
+                this.uiLayer.fillStyle(0xffffff, 0.015);
+                this.uiLayer.fillCircle(x, y, CONFIG.AWARENESS_RADIUS);
+            }
+
+            if (CONFIG.ENABLE_SHOW_INTERACTION) {
+                this.uiLayer.lineStyle(1.5, 0xffffff, 0.06);
+                this.uiLayer.strokeCircle(x, y, CONFIG.INTERACTION_RADIUS);
+            }
+        }
+
+        // Cleanup dead agent sprites
+        for (const [id, sprite] of this.agentSprites) {
+            if (!activeIds.has(id)) {
+                sprite.destroy();
+                this.agentSprites.delete(id);
+            }
+        }
+
+        // --- FOOD ---
+        const fBuffer = new Float32Array(data.foodBuffer);
+        const foodCount = fBuffer.length / 2;
+
+        while (this.foodSprites.length < foodCount) {
+            const s = this.scene.add.sprite(0, 0, 'food');
+            this.foodLayer.add(s);
+            this.foodSprites.push(s);
+        }
+        while (this.foodSprites.length > foodCount) {
+            this.foodSprites.pop().destroy();
+        }
+
+        for (let i = 0; i < foodCount; i++) {
+            this.foodSprites[i].setPosition(fBuffer[i * 2], fBuffer[i * 2 + 1]);
+        }
+
+        // --- MONSTERS ---
+        const mBuffer = new Float32Array(data.monsterBuffer);
+        const activeMonsterIds = new Set();
+        // Since monsterBuffer doesn't have IDs in the original pack, we'll use index-based mapping or adjust worker later.
+        // For now, let's just use index-based pooling if no IDs are present.
+        // Actually, looking at worker.js: monsterBuffer pack is mx, my, mr, hpRatio, hungerRatio. No ID.
+        // Let's rely on count for now.
+        const monsterCount = mBuffer.length / 5;
+        this.updateMonsterPool(monsterCount, mBuffer);
+
+        // --- PARTICLES ---
+        const pBuffer = new Float32Array(data.particleBuffer);
+        const pCount = pBuffer.length / 4;
+        this.updateParticlePool(pCount, pBuffer);
+    }
+
+    updateMonsterPool(count, buffer) {
+        const ids = Array.from(this.monsterGraphics.keys());
+
+        // Ensure we have enough graphics objects
+        while (this.monsterGraphics.size < count) {
+            const id = `m-${this.monsterGraphics.size}`;
+            const g = this.scene.add.graphics();
+            this.monsterLayer.add(g);
+            this.monsterGraphics.set(id, g);
+            // Monsters always glow amber
+            if (g.preFX) {
+                g.preFX.addGlow(0xff7400, 4, 1);
+            }
+        }
+
+        const currentIds = Array.from(this.monsterGraphics.keys());
+
+        for (let i = 0; i < count; i++) {
+            const mg = this.monsterGraphics.get(currentIds[i]);
+            mg.clear();
+            mg.setVisible(true);
+
+            const mx = buffer[i * 5];
+            const y = buffer[i * 5 + 1];
+            const r = buffer[i * 5 + 2];
+            const hp = buffer[i * 5 + 3];
+            const hunger = buffer[i * 5 + 4];
+
+            // Wobbly Blob Shape
+            mg.fillStyle(0xffce00, 1);
+            mg.beginPath();
+            const points = 16;
+            for (let j = 0; j <= points; j++) {
+                const angle = (j / points) * Math.PI * 2;
+                // Wobble factors
+                const offset = Math.sin(angle * 5 + (Date.now() / 200)) * (r * 0.15) +
+                    Math.cos(angle * 4 + mx / 100) * (r * 0.2);
+                const rad = r + offset;
+                const px = mx + Math.cos(angle) * rad;
+                const py = y + Math.sin(angle) * rad;
+                if (j === 0) mg.moveTo(px, py);
+                else mg.lineTo(px, py);
+            }
+            mg.closePath();
+            mg.fill();
+
+            // HP Bar (Draw above)
+            if (hp < 1.0) {
+                const barWidth = r * 2.2;
+                mg.fillStyle(0xff0000, 0.6);
+                mg.fillRect(mx - barWidth / 2, y - r * 1.45 - 12, barWidth, 5);
+                mg.fillStyle(0x10b981, 1);
+                mg.fillRect(mx - barWidth / 2, y - r * 1.45 - 12, barWidth * hp, 5);
+            }
+
+            // Monster Hunger Arc
+            if (CONFIG.ENABLE_HUNGER && hunger < 1.0) {
+                const rgbR = Math.floor(255 * (1 - hunger));
+                const rgbG = Math.floor(255 * hunger);
+                const color = (rgbR << 16) | (rgbG << 8);
+                mg.lineStyle(4, color, 0.8);
+                mg.beginPath();
+                mg.arc(mx, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.max(0, Math.min(1, hunger))), false);
+                mg.strokePath();
+            }
+        }
+
+        // Hide unused monsters
+        for (let i = count; i < currentIds.length; i++) {
+            this.monsterGraphics.get(currentIds[i]).setVisible(false);
+        }
+    }
+
+    updateParticlePool(count, buffer) {
+        while (this.particleSprites.length < count) {
+            const s = this.scene.add.sprite(0, 0, 'particle');
+            this.particleLayer.add(s);
+            this.particleSprites.push(s);
+        }
+        for (let i = 0; i < count; i++) {
+            const s = this.particleSprites[i];
+            const x = buffer[i * 4];
+            const y = buffer[i * 4 + 1];
+            const alpha = buffer[i * 4 + 2];
+            const type = buffer[i * 4 + 3];
+
+            s.setPosition(x, y);
+            s.setAlpha(alpha);
+            s.setVisible(true);
+
+            let color = 0xffffff;
+            if (type === 1) color = 0xef4444;
+            else if (type === 3) color = 0x94a3b8;
+            else if (type === 4) color = 0xf472b6;
+            else if (type === 5) color = 0xfbbf24;
+            s.setTint(color);
+        }
+        for (let i = count; i < this.particleSprites.length; i++) {
+            this.particleSprites[i].setVisible(false);
+        }
+    }
+
+    // UI Hardening Helpers
+    setText(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; }
+    setHTML(id, val) { const el = document.getElementById(id); if (el) el.innerHTML = val; }
+    getVal(id) { const el = document.getElementById(id); return el ? el.value : null; }
+    isChecked(id) { const el = document.getElementById(id); return el ? el.checked : false; }
+    setDisplay(id, val) { const el = document.getElementById(id); if (el) el.style.display = val; }
+    addClass(id, c) { const el = document.getElementById(id); if (el) el.classList.add(c); }
+    removeClass(id, c) { const el = document.getElementById(id); if (el) el.classList.remove(c); }
+    setInnerText(id, val) { this.setText(id, val); } // compatibility
+
+    updateUI(data) {
+        this.setText('stat-population', data.demographics.pop);
+        this.setText('stat-males', data.demographics.males);
+        this.setText('stat-females', data.demographics.females);
+        this.setText('stat-introverts', data.demographics.intro);
+        this.setText('stat-extroverts', data.demographics.extro);
+        this.setText('stat-incest-current', data.demographics.incest);
+        this.setText('stat-food', data.demographics.foodCount);
+        this.setText('stat-tribe-red', data.demographics.tribeRed);
+        this.setText('stat-tribe-blue', data.demographics.tribeBlue);
+        this.setText('stat-monsters', data.demographics.monsterCount || 0);
+
+        if (document.getElementById('stat-monster-births')) {
+            this.setText('stat-monster-births', data.stats.monster_births || 0);
+            this.setText('stat-monster-fights', data.stats.monster_fights || 0);
+            this.setText('stat-monster-deaths', data.stats.monster_deaths || 0);
+        }
+
+        this.setText('stat-encounters', data.stats.encounters);
+        this.setText('stat-kills', data.stats.kills);
+        this.setText('stat-repros', data.stats.repros);
+        this.setText('stat-born', data.stats.born);
+        this.setText('stat-incest-total', data.stats.incest_born);
+        this.setText('stat-natural-deaths', data.stats.natural_deaths);
+        this.setText('stat-exhaustion-deaths', data.stats.exhaustion_deaths || 0);
+
+        const worldYear = Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR);
+        this.setText('world-clock', `Year ${worldYear}`);
     }
 
     displayEventLog(event) {
@@ -542,157 +750,131 @@ export class SimulationEngine {
         el.innerText = event.msg;
 
         container.prepend(el);
-
-        // Remove older logs if there are too many (max 8)
-        while (container.children.length > 8) {
-            container.removeChild(container.lastChild);
-        }
+        while (container.children.length > 8) container.removeChild(container.lastChild);
 
         setTimeout(() => {
             if (el.parentElement) {
                 el.classList.add('fade-out');
-                setTimeout(() => {
-                    if (el.parentElement) el.remove();
-                }, 1000);
+                setTimeout(() => { if (el.parentElement) el.remove(); }, 1000);
             }
-        }, 5000); // Wait 5 seconds before fading out
+        }, 5000);
     }
 
     updateEntityStatsPanel(a) {
         if (!a) return;
-        document.getElementById('entity-stats-panel').classList.remove('hidden');
+        this.removeClass('entity-stats-panel', 'hidden');
 
-        document.getElementById('ent-name').innerText = a.name;
-        document.getElementById('ent-gender').innerText = a.gender;
-        document.getElementById('ent-gender').style.color = a.gender === 'N/A' ? '#a1a1aa' : (a.gender === 'Male' ? '#60a5fa' : '#f472b6');
+        this.setText('ent-name', a.name);
+        this.setText('ent-gender', a.gender);
+        const genCol = a.gender === 'N/A' ? '#a1a1aa' : (a.gender === 'Male' ? '#60a5fa' : '#f472b6');
+        const genEl = document.getElementById('ent-gender');
+        if (genEl) genEl.style.color = genCol;
 
         const ageEl = document.getElementById('ent-age');
-        if (a.age === 'Immortal') {
-            ageEl.innerText = `Immortal`;
-            ageEl.style.color = '#ef4444';
-        } else {
-            ageEl.innerText = `${a.age} (${a.stage})`;
-            if (a.stage === 'Child') ageEl.style.color = '#86efac';
-            else if (a.stage === 'Teen') ageEl.style.color = '#fde68a';
-            else if (a.stage === 'Adult') ageEl.style.color = '#f8fafc';
-            else ageEl.style.color = '#94a3b8';
+        if (ageEl) {
+            if (a.age === 'Immortal') {
+                ageEl.innerText = `Immortal`;
+                ageEl.style.color = '#ef4444';
+            } else {
+                ageEl.innerText = `${a.age} (${a.stage})`;
+                if (a.stage === 'Child') ageEl.style.color = '#86efac';
+                else if (a.stage === 'Teen') ageEl.style.color = '#fde68a';
+                else if (a.stage === 'Adult') ageEl.style.color = '#f8fafc';
+                else ageEl.style.color = '#94a3b8';
+            }
         }
 
-        document.getElementById('ent-strength').innerText = a.strength;
-        document.getElementById('ent-intelligence').innerText = a.intelligence;
-        document.getElementById('ent-speed').innerText = a.speed !== undefined && a.speed !== 'N/A' ? `${a.speed} / 100` : (a.speed || 'N/A');
-        document.getElementById('ent-offspring').innerText = a.offspringCount;
+        this.setText('ent-strength', a.strength);
+        this.setText('ent-intelligence', a.intelligence);
+        this.setText('ent-speed', a.speed !== undefined && a.speed !== 'N/A' ? `${a.speed} / 100` : (a.speed || 'N/A'));
+        this.setText('ent-offspring', a.offspringCount);
 
         const incestEl = document.getElementById('ent-incest');
-        incestEl.innerText = a.bornOfIncest === 'N/A' ? 'N/A' : (a.bornOfIncest ? "Yes" : "No");
-        incestEl.style.color = a.bornOfIncest === 'N/A' ? '#a1a1aa' : (a.bornOfIncest ? "#ef4444" : "#10b981");
-
-        // Personality & Drives
-        document.getElementById('ent-personality').innerText = a.personality;
-        document.getElementById('ent-personality').style.color = a.personality === 'Bloodthirsty' ? '#ef4444' : (a.personality === 'Introvert' ? '#818cf8' : '#34d399');
-        document.getElementById('ent-libido').innerText = a.libido;
-        document.getElementById('ent-fighter').innerText = a.fighter;
-        document.getElementById('ent-weariness').innerText = a.weariness !== undefined ? a.weariness : 0;
-        document.getElementById('ent-charm').innerText = a.charm;
-
-        // Berserk Status
-        const statusEl = document.getElementById('ent-status');
-        if (a.isBerserk) {
-            statusEl.innerText = "BERSERK (RAGE)";
-            statusEl.style.color = "#a855f7"; // purple-500
-        } else {
-            statusEl.innerText = "Stable";
-            statusEl.style.color = "#10b981";
+        if (incestEl) {
+            incestEl.innerText = a.bornOfIncest === 'N/A' ? 'N/A' : (a.bornOfIncest ? "Yes" : "No");
+            incestEl.style.color = a.bornOfIncest === 'N/A' ? '#a1a1aa' : (a.bornOfIncest ? "#ef4444" : "#10b981");
         }
 
-        // Partner Preferences
-        document.getElementById('ent-pref-str').innerText = a.prefMinStrength;
-        document.getElementById('ent-pref-int').innerText = a.prefMinIntelligence;
-        document.getElementById('ent-pref-pers').innerText = (a.prefPersonality === 'none' || a.prefPersonality === 'N/A') ? 'Any' : a.prefPersonality;
+        this.setText('ent-personality', a.personality);
+        const persEl = document.getElementById('ent-personality');
+        if (persEl) persEl.style.color = a.personality === 'Bloodthirsty' ? '#ef4444' : (a.personality === 'Introvert' ? '#818cf8' : '#34d399');
+
+        this.setText('ent-libido', a.libido);
+        this.setText('ent-fighter', a.fighter);
+        this.setText('ent-weariness', a.weariness !== undefined ? a.weariness : 0);
+        this.setText('ent-charm', a.charm);
+
+        const statusEl = document.getElementById('ent-status');
+        if (statusEl) {
+            if (a.isBerserk) {
+                statusEl.innerText = "BERSERK (RAGE)";
+                statusEl.style.color = "#a855f7";
+            } else {
+                statusEl.innerText = "Stable";
+                statusEl.style.color = "#10b981";
+            }
+        }
+
+        this.setText('ent-pref-str', a.prefMinStrength);
+        this.setText('ent-pref-int', a.prefMinIntelligence);
+        this.setText('ent-pref-pers', (a.prefPersonality === 'none' || a.prefPersonality === 'N/A') ? 'Any' : a.prefPersonality);
     }
 
     checkGameOver(data) {
         if (this.isPaused || this.isGameOverFlag) return;
-
         let reason = null;
-        if (data.demographics.pop === 0 && data.demographics.monsterCount > 0) {
-            reason = "EATEN ALIVE: Monsters devoured humanity.";
-        } else if (data.demographics.pop === 0) {
-            reason = "EXTINCTION EVENT: The entire population was wiped out.";
-        } else if (CONFIG.ENABLE_MAX_POPULATION && data.demographics.pop >= CONFIG.MAX_POPULATION) {
-            reason = "OVERPOPULATION: The world reached its max carrying capacity.";
-        }
+        if (data.demographics.pop === 0 && data.demographics.monsterCount > 0) reason = "EATEN ALIVE: Monsters devoured humanity.";
+        else if (data.demographics.pop === 0) reason = "EXTINCTION EVENT: The entire population was wiped out.";
+        else if (CONFIG.ENABLE_MAX_POPULATION && data.demographics.pop >= CONFIG.MAX_POPULATION) reason = "OVERPOPULATION: The world reached its max carrying capacity.";
 
-        if (reason) {
-            this.showGameOver(reason, data);
-        }
+        if (reason) this.showGameOver(reason, data);
     }
 
     showGameOver(reason, data) {
         this.isGameOverFlag = true;
         this.isPaused = true;
-        this.worker.postMessage({ type: 'PAUSE', isPaused: true }); // Make sure worker halts
+        this.worker.postMessage({ type: 'PAUSE', isPaused: true });
 
-        const setStat = (id, val) => {
-            const el = document.getElementById(id);
-            if (el) el.innerText = val;
-        };
+        this.setText('go-reason', reason);
+        this.setText('go-years', Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR));
+        this.setText('go-pop', data.demographics.pop);
+        this.setText('go-peak', data.stats.peak_pop || 0);
+        this.setText('go-encounters', data.stats.encounters);
+        this.setText('go-kills', data.stats.kills);
+        this.setText('go-repros', data.stats.repros);
+        this.setText('go-born', data.stats.born);
+        this.setText('go-incest', data.stats.incest_born);
+        this.setText('go-natural', data.stats.natural_deaths);
+        this.setText('go-avg-str', data.analytics.avgStr);
+        this.setText('go-avg-int', data.analytics.avgInt);
+        this.setText('go-avg-spd', data.analytics.avgSpd || '-');
+        this.setText('go-monster-pop', data.demographics.monsterCount || 0);
+        this.setText('go-monster-deaths', data.stats.monster_deaths || 0);
+        this.setText('go-monster-fights', data.stats.monster_fights || 0);
+        this.setText('go-monster-births', data.stats.monster_births || 0);
 
-        setStat('go-reason', reason);
-        setStat('go-years', Math.floor(data.worldTick / CONFIG.TICKS_PER_YEAR));
-        setStat('go-pop', data.demographics.pop);
-        setStat('go-peak', data.stats.peak_pop || 0);
+        this.setText('go-prolific', data.analytics.prolificCount > 0 ? `${data.analytics.prolificName} (${data.analytics.prolificCount} children)` : 'None');
+        this.setText('go-strongest', data.analytics.strongestStr > 0 ? `${data.analytics.strongestName} (${data.analytics.strongestStr} STR)` : 'None');
 
-        setStat('go-encounters', data.stats.encounters);
-        setStat('go-kills', data.stats.kills);
-        setStat('go-repros', data.stats.repros);
-        setStat('go-born', data.stats.born);
-        setStat('go-incest', data.stats.incest_born);
-        setStat('go-natural', data.stats.natural_deaths);
-
-        setStat('go-avg-str', data.analytics.avgStr);
-        setStat('go-avg-int', data.analytics.avgInt);
-        setStat('go-avg-spd', data.analytics.avgSpd || '-');
-
-        setStat('go-monster-pop', data.demographics.monsterCount || 0);
-        setStat('go-monster-deaths', data.stats.monster_deaths || 0);
-        setStat('go-monster-fights', data.stats.monster_fights || 0);
-        setStat('go-monster-births', data.stats.monster_births || 0);
-
-        if (data.analytics.prolificCount > 0) {
-            setStat('go-prolific', `${data.analytics.prolificName} (${data.analytics.prolificCount} children)`);
-        } else {
-            setStat('go-prolific', 'None');
-        }
-
-        if (data.analytics.strongestStr > 0) {
-            setStat('go-strongest', `${data.analytics.strongestName} (${data.analytics.strongestStr} STR)`);
-        } else {
-            setStat('go-strongest', 'None');
-        }
-
-        // Render History Track
         const track = document.getElementById('go-history-track');
-        track.innerHTML = '';
-        if (data.milestones && data.milestones.length > 0) {
-            data.milestones.forEach(m => {
-                const row = document.createElement('div');
-                let color = '#d1d5db'; // default info
-                if (m.type === 'danger') color = '#ef4444';
-                if (m.type === 'warning') color = '#fbbf24';
-                if (m.type === 'success') color = '#10b981';
-
-                row.innerHTML = `<span style="color: var(--text-muted); font-weight: 700;">Year ${m.year}:</span> <span style="color: ${color};">${m.msg}</span>`;
-                track.appendChild(row);
-            });
-        } else {
-            track.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-style: italic;">No notable history recorded.</div>';
+        if (track) {
+            track.innerHTML = '';
+            if (data.milestones && data.milestones.length > 0) {
+                data.milestones.forEach(m => {
+                    const row = document.createElement('div');
+                    let color = '#d1d5db';
+                    if (m.type === 'danger') color = '#ef4444';
+                    if (m.type === 'warning') color = '#fbbf24';
+                    if (m.type === 'success') color = '#10b981';
+                    row.innerHTML = `<span style="color: var(--text-muted); font-weight: 700;">Year ${m.year}:</span> <span style="color: ${color};">${m.msg}</span>`;
+                    track.appendChild(row);
+                });
+            } else {
+                track.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-style: italic;">No notable history recorded.</div>';
+            }
         }
 
-        // Unhide the modal first so dimensions are non-zero
-        document.getElementById('game-over-modal').classList.remove('hidden');
-
-        // Render demographic chart after a tiny reflow delay
+        this.removeClass('game-over-modal', 'hidden');
         setTimeout(() => {
             this.renderStatsChart(data.statHistory);
             this.renderPopChart(data.statHistory);
@@ -701,289 +883,94 @@ export class SimulationEngine {
 
     renderStatsChart(history) {
         const canvas = document.getElementById('go-stats-chart');
-        if (!canvas || !history || history.length === 0) {
-            // No data at all
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                ctx.font = 'italic 12px Inter';
-                ctx.textAlign = 'center';
-                ctx.fillText('No historical data recorded', canvas.width / 2, canvas.height / 2);
-            }
-            return;
-        }
+        if (!canvas || !history || history.length === 0) return;
 
-        // Match resolution
+        const ctx = canvas.getContext('2d');
         const rect = canvas.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
-
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        const padding = 25;
+        const w = canvas.width, h = canvas.height, padding = 35;
 
         ctx.clearRect(0, 0, w, h);
 
-        // Grid lines (horizontal)
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px Inter';
         for (let i = 0; i <= 4; i++) {
             let y = padding + (h - padding * 2) * (i / 4);
-            ctx.beginPath();
-            ctx.moveTo(padding, y);
-            ctx.lineTo(w - padding, y);
-            ctx.stroke();
-
-            // Y-axis labels (0, 25, 50, 75, 100)
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.font = '9px Inter';
-            ctx.fillText(100 - i * 25, 2, y + 3);
-            ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(w - padding, y); ctx.stroke();
+            ctx.fillText(100 - i * 25, 5, y + 4);
         }
         ctx.setLineDash([]);
 
+        // Average lines
         const xStep = (w - padding * 2) / Math.max(1, history.length - 1);
         const getY = (val) => h - padding - (val / 100) * (h - padding * 2);
 
-        if (history.length === 1) {
-            // Draw Genesis Dots
-            const x = padding;
-            ctx.fillStyle = '#f87171'; // STR
-            ctx.beginPath(); ctx.arc(x, getY(history[0].avgStr), 5, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#60a5fa'; // INT
-            ctx.beginPath(); ctx.arc(x, getY(history[0].avgInt), 5, 0, Math.PI * 2); ctx.fill();
-            if (history[0].avgSpd !== undefined) {
-                ctx.fillStyle = '#fbbf24'; // SPD
-                ctx.beginPath(); ctx.arc(x, getY(history[0].avgSpd), 5, 0, Math.PI * 2); ctx.fill();
-            }
-        } else {
-            // Gradient Area Fills (Strength)
-            const strGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
-            strGrad.addColorStop(0, 'rgba(248, 113, 113, 0.2)');
-            strGrad.addColorStop(1, 'rgba(248, 113, 113, 0)');
+        // STR line
+        ctx.beginPath(); ctx.strokeStyle = '#f87171'; ctx.lineWidth = 3;
+        history.forEach((pt, i) => { const x = padding + i * xStep, y = getY(pt.avgStr); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+        ctx.stroke();
 
-            ctx.beginPath();
-            ctx.fillStyle = strGrad;
-            history.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.avgStr);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.lineTo(padding + (history.length - 1) * xStep, h - padding);
-            ctx.lineTo(padding, h - padding);
-            ctx.closePath();
-            ctx.fill();
+        // INT line
+        ctx.beginPath(); ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 3;
+        history.forEach((pt, i) => { const x = padding + i * xStep, y = getY(pt.avgInt); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+        ctx.stroke();
 
-            // Strength Line
-            ctx.beginPath();
-            ctx.strokeStyle = '#f87171';
-            ctx.lineWidth = 3;
-            ctx.lineJoin = 'round';
-            history.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.avgStr);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-
-            // Gradient Area Fills (Intelligence)
-            const intGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
-            intGrad.addColorStop(0, 'rgba(96, 165, 250, 0.2)');
-            intGrad.addColorStop(1, 'rgba(96, 165, 250, 0)');
-
-            ctx.beginPath();
-            ctx.fillStyle = intGrad;
-            history.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.avgInt);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.lineTo(padding + (history.length - 1) * xStep, h - padding);
-            ctx.lineTo(padding, h - padding);
-            ctx.closePath();
-            ctx.fill();
-
-            // Intelligence Line
-            ctx.beginPath();
-            ctx.strokeStyle = '#60a5fa';
-            ctx.lineWidth = 3;
-            ctx.lineJoin = 'round';
-            history.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.avgInt);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-
-            // Gradient Area Fill (Speed)
-            const spdData = history.filter(pt => pt.avgSpd !== undefined);
-            if (spdData.length > 0) {
-                const spdGrad = ctx.createLinearGradient(0, padding, 0, h - padding);
-                spdGrad.addColorStop(0, 'rgba(251, 191, 36, 0.15)');
-                spdGrad.addColorStop(1, 'rgba(251, 191, 36, 0)');
-
-                const spdXStep = (w - padding * 2) / Math.max(1, spdData.length - 1);
-                ctx.beginPath();
-                ctx.fillStyle = spdGrad;
-                spdData.forEach((pt, i) => {
-                    const x = padding + i * spdXStep;
-                    const y = getY(pt.avgSpd);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
-                ctx.lineTo(padding + (spdData.length - 1) * spdXStep, h - padding);
-                ctx.lineTo(padding, h - padding);
-                ctx.closePath();
-                ctx.fill();
-
-                // Speed Line
-                ctx.beginPath();
-                ctx.strokeStyle = '#fbbf24';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([6, 3]);
-                ctx.lineJoin = 'round';
-                spdData.forEach((pt, i) => {
-                    const x = padding + i * spdXStep;
-                    const y = getY(pt.avgSpd);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-
-        } // end else (history.length > 1)
+        // Labels
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px Inter';
+        ctx.fillText('Evolution of Average Stats', w / 2 - 60, 20);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText('Time (Years)', w / 2 - 30, h - 5);
 
         // Legend
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 10px Inter';
-        ctx.fillStyle = '#f87171';
-        ctx.fillText('STR', padding, h - 5);
-        ctx.fillStyle = '#60a5fa';
-        ctx.fillText('INT', padding + 36, h - 5);
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillText('⚡SPD', padding + 68, h - 5);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.textAlign = 'right';
-        const displayYear = history[history.length - 1].year;
-        ctx.fillText(`YEAR ${displayYear}`, w - padding, h - 5);
+        ctx.fillStyle = '#f87171'; ctx.fillText('🔴 Strength', w - 85, 20);
+        ctx.fillStyle = '#60a5fa'; ctx.fillText('🔵 Intelligence', w - 85, 35);
     }
 
     renderPopChart(history) {
         const canvas = document.getElementById('go-pop-chart');
-        if (!canvas) return;
-
-        if (!history || history.length === 0 || !history.some(h => h.pop !== undefined)) {
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(255,255,255,0.2)';
-            ctx.font = 'italic 12px Inter';
-            ctx.textAlign = 'center';
-            ctx.fillText('No historical data recorded', canvas.width / 2, canvas.height / 2);
-            return;
-        }
-
-        // Match resolution
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+        if (!canvas || !history || history.length === 0) return;
 
         const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        const padding = 25;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width; canvas.height = rect.height;
+        const w = canvas.width, h = canvas.height, padding = 35;
 
         ctx.clearRect(0, 0, w, h);
-
-        const popData = history.filter(pt => pt.pop !== undefined);
-        const maxPop = Math.max(...popData.map(pt => pt.pop), 1);
-        const xStep = (w - padding * 2) / Math.max(1, popData.length - 1);
+        const maxPop = Math.max(...history.map(pt => pt.pop), 10);
+        const xStep = (w - padding * 2) / Math.max(1, history.length - 1);
         const getY = (val) => h - padding - (val / maxPop) * (h - padding * 2);
 
-        // Horizontal grid lines
+        // Grid
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i++) {
-            const y = padding + (h - padding * 2) * (i / 4);
-            ctx.beginPath();
-            ctx.moveTo(padding, y);
-            ctx.lineTo(w - padding, y);
-            ctx.stroke();
-
-            // Y-axis labels
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'rgba(255,255,255,0.3)';
-            ctx.font = '9px Inter';
-            ctx.textAlign = 'right';
-            const labelVal = Math.round(maxPop * (1 - i / 4));
-            ctx.fillText(labelVal, padding - 3, y + 3);
-            ctx.setLineDash([5, 5]);
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.font = '10px Inter';
+        for (let i = 0; i <= 2; i++) {
+            let y = padding + (h - padding * 2) * (i / 2);
+            ctx.beginPath(); ctx.moveTo(padding, y); ctx.lineTo(w - padding, y); ctx.stroke();
+            ctx.fillText(Math.round(maxPop - i * (maxPop / 2)), 5, y + 4);
         }
         ctx.setLineDash([]);
 
-        if (popData.length === 1) {
-            ctx.fillStyle = '#34d399';
-            ctx.beginPath();
-            ctx.arc(padding, getY(popData[0].pop), 5, 0, Math.PI * 2);
-            ctx.fill();
-        } else {
-            // Gradient area fill
-            const grad = ctx.createLinearGradient(0, padding, 0, h - padding);
-            grad.addColorStop(0, 'rgba(52, 211, 153, 0.35)');
-            grad.addColorStop(1, 'rgba(52, 211, 153, 0)');
+        ctx.beginPath(); ctx.strokeStyle = '#10b981'; ctx.lineWidth = 3;
+        history.forEach((pt, i) => { const x = padding + i * xStep, y = getY(pt.pop); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+        ctx.stroke();
 
-            ctx.beginPath();
-            ctx.fillStyle = grad;
-            popData.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.pop);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.lineTo(padding + (popData.length - 1) * xStep, h - padding);
-            ctx.lineTo(padding, h - padding);
-            ctx.closePath();
-            ctx.fill();
-
-            // Population line
-            ctx.beginPath();
-            ctx.strokeStyle = '#34d399';
-            ctx.lineWidth = 3;
-            ctx.lineJoin = 'round';
-            popData.forEach((pt, i) => {
-                const x = padding + i * xStep;
-                const y = getY(pt.pop);
-                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-
-            // Peak marker
-            const peakPt = popData.reduce((best, pt) => pt.pop > best.pop ? pt : best, popData[0]);
-            const peakIdx = popData.indexOf(peakPt);
-            const peakX = padding + peakIdx * xStep;
-            const peakY = getY(peakPt.pop);
-            ctx.beginPath();
-            ctx.arc(peakX, peakY, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#fbbf24';
-            ctx.fill();
-        }
-
-        // Legend
-        ctx.textAlign = 'left';
-        ctx.font = 'bold 10px Inter';
-        ctx.fillStyle = '#34d399';
-        ctx.fillText('POPULATION', padding, h - 5);
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillText('● PEAK', padding + 90, h - 5);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.textAlign = 'right';
-        const lastYear = popData[popData.length - 1].year;
-        ctx.fillText(`YEAR ${lastYear}`, w - padding, h - 5);
+        // Labels
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px Inter';
+        ctx.fillText('Population Over Time', w / 2 - 50, 20);
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText('Time (Years)', w / 2 - 30, h - 5);
+        ctx.fillStyle = '#10b981'; ctx.fillText('🟢 Population', w - 85, 20);
     }
 
     start() {
-        requestAnimationFrame(this.loop);
+        // Phaser starts automatically upon instantiation of the Game object
+        // but we can trigger initial events if needed
     }
 }

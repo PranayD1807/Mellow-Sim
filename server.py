@@ -13,6 +13,7 @@ class NoCacheHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     port = 8080
     handler = NoCacheHTTPRequestHandler
+    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", port), handler) as httpd:
         print(f"Serving at port {port} with NO CACHING...")
         httpd.serve_forever()
