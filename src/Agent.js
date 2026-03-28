@@ -1,5 +1,5 @@
 import { Entity } from './Entity.js?v=123456';
-import { CONFIG, GENDER, GENDER_COLORS, PERSONALITY, TRIBE, TRIBE_COLORS } from './config.js?v=123456';
+import { CONFIG, GENDER, GENDER_COLORS, PERSONALITY, TRIBE, TRIBE_COLORS, ANIMATION_STATE } from './config.js?v=123456';
 import { rand, randInt, generateId, generateName, clamp } from './utils.js?v=123456';
 
 export class Agent extends Entity {
@@ -62,6 +62,10 @@ export class Agent extends Entity {
         this.isBerserk = false;
         this.stressLevel = 0;
         this.berserkTicks = 0;
+
+        // Animation State
+        this.state = ANIMATION_STATE.IDLE;
+        this.stateTimer = 0;
 
         // Initial random vector
         const angle = rand(0, Math.PI * 2);
@@ -458,8 +462,14 @@ export class Agent extends Entity {
                 this.stressLevel = 0;
             }
         }
-        this.x += this.vx;
-        this.y += this.vy;
+        // Slow down massively during combat animations to make them feel impactful
+        let speedMult = 1.0;
+        if (this.stateTimer > 0 && (this.state === ANIMATION_STATE.ATTACK || this.state === ANIMATION_STATE.HURT)) {
+            speedMult = 0.1;
+        }
+
+        this.x += this.vx * speedMult;
+        this.y += this.vy * speedMult;
 
         if (this.x - this.radius < 0 || this.x + this.radius > width) {
             this.vx *= -1;
@@ -480,6 +490,20 @@ export class Agent extends Entity {
 
         if (this.cooldown > 0) this.cooldown--;
         this.degradePreferences(worldTick);
+
+        // Update Animation State
+        if (this.markedForDeath) {
+            this.state = ANIMATION_STATE.DEAD;
+        } else if (this.stateTimer > 0) {
+            this.stateTimer--;
+        } else {
+            const speed = Math.hypot(this.vx, this.vy);
+            if (speed > 0.1) {
+                this.state = ANIMATION_STATE.WALK;
+            } else {
+                this.state = ANIMATION_STATE.IDLE;
+            }
+        }
 
         // Combat weariness recovery & exhaustion death
         if (CONFIG.ENABLE_COMBAT_WEARINESS) {

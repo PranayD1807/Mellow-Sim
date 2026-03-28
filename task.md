@@ -1,0 +1,12 @@
+- [ ] Define animation states in `src/config.js`
+- [ ] Update `src/Agent.js` with state management
+- [ ] Update `src/Monster.js` with state management
+- [ ] Update `src/worker.js` to transfer state and monster IDs
+- [ ] Update `src/InteractionManager.js` to trigger Attack state
+- [ ] Update `src/SimulationEngine.js`:
+    - [ ] Change background color and add grid
+    - [ ] Preload all spritesheets
+    - [ ] Create Phaser animations
+    - [ ] Refactor agent rendering to use animations
+    - [ ] Refactor monster rendering to use animations
+- [ ] Verify animations and background in the browser

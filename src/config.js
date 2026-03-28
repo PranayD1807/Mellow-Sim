@@ -3,15 +3,15 @@ export const CONFIG = {
     INITIAL_RED_FEMALES: 15,
     INITIAL_BLUE_MALES: 15,
     INITIAL_BLUE_FEMALES: 15,
-    AGENT_RADIUS: 15,
+    AGENT_RADIUS: 40,           // Massive scale-up to match the 150px visual radius
     SPRITE_SIZE: 15,            // Rendered size of sprite images (width & height)
     MAX_FOOD: 250,              // limit max food on screen
     FOOD_NUTRITION: 1500,
     MAX_HUNGER: 3000,           // How long an agent can survive without food
     STARVATION_RATE: 1,         // Hunger lost per tick
-    INTERACTION_RADIUS: 25,
-    AWARENESS_RADIUS: 200,
-    MAX_SPEED: 0.5,
+    INTERACTION_RADIUS: 120,    // Engage at a visually appropriate distance
+    AWARENESS_RADIUS: 700,      // Humans can see across a larger portion of the map
+    MAX_SPEED: 0.35,            // Slower, smoother pacing so they don't sprint crazily
     MIN_SPEED_STAT: 10,         // Min value for the per-agent speed attribute (1-100 scale)
     MAX_SPEED_STAT: 100,        // Max value for the per-agent speed attribute (1-100 scale)
     REPRODUCTION_COOLDOWN: 100, // Recover faster after having a child
@@ -22,9 +22,9 @@ export const CONFIG = {
     // Monsters
     ENABLE_MONSTERS: true,
     INITIAL_MONSTERS: 2,
-    MONSTER_RADIUS: 25,
-    MONSTER_SPEED: 0.45,
-    MONSTER_AWARENESS: 600,
+    MONSTER_RADIUS: 60,
+    MONSTER_SPEED: 0.30,
+    MONSTER_AWARENESS: 1200,
     MONSTER_SPAWN_INTERVAL: 1800, // E.g., spawn a new monster every 30 years (1800 ticks at 60tpy)
 
     // Mechanisms
@@ -94,4 +94,12 @@ export const GENDER_COLORS = {
 export const PERSONALITY = {
     INTROVERT: 'Introvert',
     EXTROVERT: 'Extrovert'
+};
+
+export const ANIMATION_STATE = {
+    IDLE: 0,
+    WALK: 1,
+    ATTACK: 2,
+    HURT: 3,
+    DEAD: 4
 };

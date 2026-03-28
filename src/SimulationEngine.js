@@ -1,4 +1,4 @@
-import { CONFIG, GENDER } from './config.js?v=123456';
+import { CONFIG, GENDER, ANIMATION_STATE } from './config.js?v=123456';
 
 export class SimulationEngine {
     constructor(canvasId) {
@@ -10,25 +10,31 @@ export class SimulationEngine {
         this.renderData = null;
         this.latestAgentBuffer = null;
 
+        // Fixed World Dimensions
+        this.WORLD_WIDTH = 2500;
+        this.WORLD_HEIGHT = 2000;
+
         // Spawn precise Data-Oriented Web Worker
         this.worker = new Worker('./src/worker.js?v=123456', { type: 'module' });
         this.worker.onmessage = this.handleWorkerMessage.bind(this);
+        this.worker.onerror = (e) => console.error('[Worker Error]', e.message, e);
 
         this.initPhaser(canvasId);
         this.bindUIEvents();
     }
 
     initPhaser(canvasId) {
+        const self = this;
         const config = {
             type: Phaser.WEBGL,
             width: window.innerWidth,
             height: window.innerHeight,
             canvas: document.getElementById(canvasId),
-            backgroundColor: '#0f172a',
+            backgroundColor: '#f8fafc',
             scene: {
-                preload: this.preload.bind(this),
-                create: this.create.bind(this),
-                update: this.update.bind(this)
+                preload: function () { self.preload(this); },
+                create: function () { self.create(this); },
+                update: function () { self.update(this); }
             },
             fps: {
                 target: 60,
@@ -39,32 +45,211 @@ export class SimulationEngine {
         this.game = new Phaser.Game(config);
     }
 
-    preload() {
-        // We'll generate textures programmatically in create
+    preload(scene) {
+        this.scene = scene;
+
+        // === MALE SPRITES ===
+        // Red Tribe -> Swordsman, Blue Tribe -> Knight
+        const maleTribalDirs = { 'red': 'Swordsman', 'blue': 'Knight' };
+        const maleActionMap = {
+            'idle': 'Idle',
+            'walk': 'Run',
+            'attack': 'Attack_1',
+            'hurt': 'Hurt',
+            'dead': 'Dead'
+        };
+        ['red', 'blue'].forEach(t => {
+            const dir = maleTribalDirs[t];
+            Object.entries(maleActionMap).forEach(([key, file]) => {
+                this.scene.load.spritesheet(
+                    `male-${t}-${key}`,
+                    `./src/sprites/${dir}/${file}.png`,
+                    { frameWidth: 128, frameHeight: 128 }
+                );
+            });
+        });
+
+        // === FEMALE SPRITES ===
+        // Red Tribe -> Archer, Blue Tribe -> Enchantress
+        const femaleTribalDirs = { 'red': 'Archer', 'blue': 'Enchantress' };
+        const femaleActionMap = {
+            'idle': 'Idle',
+            'walk': 'Run',
+            'attack': 'Attack_1',
+            'hurt': 'Hurt',
+            'dead': 'Dead'
+        };
+        ['red', 'blue'].forEach(t => {
+            const dir = femaleTribalDirs[t];
+            Object.entries(femaleActionMap).forEach(([key, file]) => {
+                this.scene.load.spritesheet(
+                    `female-${t}-${key}`,
+                    `./src/sprites/${dir}/${file}.png`,
+                    { frameWidth: 128, frameHeight: 128 }
+                );
+            });
+        });
+
+        // === MONSTER SPRITES ===
+        const monsterActions = ['Idle', 'Walk', 'Attack', 'Hurt', 'Dead'];
+        monsterActions.forEach(a => {
+            this.scene.load.spritesheet(
+                `monster-1-${a.toLowerCase()}`,
+                `./src/sprites/Monster/Minotaur_1/${a}.png`,
+                { frameWidth: 128, frameHeight: 128 }
+            );
+            this.scene.load.spritesheet(
+                `monster-2-${a.toLowerCase()}`,
+                `./src/sprites/Monster/Minotaur_2/${a}.png`,
+                { frameWidth: 128, frameHeight: 128 }
+            );
+        });
+
+        // Background Custom Tiles
+        this.scene.load.image('bg-grass', './src/sprites/BG/1 Tiles/FieldsTile_02.png');
+
+        // Environment Props for Fixed Handcrafted Map
+        this.scene.load.image('prop-tent', './src/sprites/BG/2 Objects/8 Camp/1.png');
+        this.scene.load.image('prop-tent2', './src/sprites/BG/2 Objects/8 Camp/3.png');
+        this.scene.load.image('prop-log', './src/sprites/BG/2 Objects/7 Decor/Log1.png');
+        this.scene.load.image('prop-bush', './src/sprites/BG/2 Objects/9 Bush/1.png');
+        this.scene.load.image('prop-tree', './src/sprites/BG/2 Objects/7 Decor/Tree1.png');
+        this.scene.load.image('prop-dirt', './src/sprites/BG/2 Objects/7 Decor/Dirt4.png');
+        this.scene.load.image('prop-fence', './src/sprites/BG/2 Objects/2 Fence/2.png');
+        this.scene.load.image('prop-stone', './src/sprites/BG/2 Objects/4 Stone/1.png');
+        this.scene.load.image('prop-fire', './src/sprites/BG/3 Animated Objects/2 Campfire/1.png');
     }
 
-    create() {
-        this.scene = this.game.scene.scenes[0];
+    create(scene) {
+        this.scene = scene;
 
-        // Generate procedural textures
+        // Generate procedural textures (fallback/particles/bg)
         this.generateTextures();
 
-        // Groups for pooling
-        this.agentSprites = new Map();
-        this.monsterGraphics = new Map(); // Changed to Map of Graphics for wobbly blobs
-        this.foodSprites = [];
-        this.particleSprites = [];
+        // Background Terrain using provided Tileset
+        this.terrainBg = this.scene.add.tileSprite(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT, 'bg-grass');
+        this.terrainBg.setOrigin(0, 0);
+        this.terrainBg.setTileScale(2.5); // Scale up the 16x16 or 32x32 tiles to fit the scene nicely
 
-        // Layers
+        // Faint overlay grid for spatial readability (very subtle)
+        this.grid = this.scene.add.grid(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT, 100, 100, 0x000000, 0, 0x000000, 0.04);
+        this.grid.setOrigin(0, 0);
+
+        // Layers (MUST be created before rendering map props)
+        this.gridLayer = this.scene.add.layer();
+        this.gridLayer.add(this.grid);
         this.foodLayer = this.scene.add.layer();
         this.agentLayer = this.scene.add.layer();
         this.monsterLayer = this.scene.add.layer();
         this.particleLayer = this.scene.add.layer();
         this.uiLayer = this.scene.add.graphics(); // For awareness circles etc.
 
-        // Camera setup
+        // Camera setup (MUST be initialized early in case of early worker events)
         this.camera = this.scene.cameras.main;
+        this.camera.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+        this.camera.setScroll(this.WORLD_WIDTH / 2 - window.innerWidth / 2, this.WORLD_HEIGHT / 2 - window.innerHeight / 2);
         this.setupCameraControls();
+
+        // Fixed Handmade Map Environment
+        const placeProp = (key, x, y, scale = 2.0) => {
+            const prop = this.scene.add.sprite(x, y, key);
+            prop.setOrigin(0.5, 1);
+            prop.setScale(scale);
+            prop.setAlpha(1.0);
+            this.gridLayer.add(prop);
+        };
+
+        // 1. Draw central dirt roads winding through the map
+        const pathScale = 4.0;
+        const pathSpacing = 30; // Closer spacing to make continuous path
+        const drawHorizontalPath = (startX, startY, endX) => {
+            let y = startY;
+            for (let x = startX; x < endX; x += pathSpacing) {
+                y += (Math.random() - 0.5) * 10; // Winding
+                placeProp('prop-dirt', x, y, pathScale + (Math.random() * 1.5));
+                // Add occasional stones near path
+                if (Math.random() < 0.1) placeProp('prop-stone', x + (Math.random() > 0.5 ? 40 : -40), y, 1.5);
+            }
+        };
+
+        // Main highway across middle bounds
+        drawHorizontalPath(100, this.WORLD_HEIGHT / 2, this.WORLD_WIDTH - 100);
+
+        const drawVerticalPath = (startX, startY, endY) => {
+            let x = startX;
+            for (let y = startY; y < endY; y += pathSpacing) {
+                x += (Math.random() - 0.5) * 10;
+                placeProp('prop-dirt', x, y, pathScale + (Math.random() * 1.5));
+            }
+        }
+
+        // Branching paths to camps
+        drawVerticalPath(this.WORLD_WIDTH / 3, this.WORLD_HEIGHT / 2 - 200, this.WORLD_HEIGHT / 2);
+        drawVerticalPath((this.WORLD_WIDTH / 3) * 2, this.WORLD_HEIGHT / 2, this.WORLD_HEIGHT / 2 + 300);
+
+        // 2. Build the Red Tribe Camp (Top Left)
+        const redCampX = this.WORLD_WIDTH / 3 - 50;
+        const redCampY = this.WORLD_HEIGHT / 2 - 300;
+        placeProp('prop-tent', redCampX - 100, redCampY, 2.0);
+        placeProp('prop-tent', redCampX + 50, redCampY - 80, 2.0);
+        placeProp('prop-tent2', redCampX + 100, redCampY + 20, 2.0);
+        placeProp('prop-fire', redCampX, redCampY + 20, 1.5);
+        placeProp('prop-log', redCampX - 40, redCampY + 50, 2.0);
+        placeProp('prop-log', redCampX + 40, redCampY + 40, 2.0);
+
+        // Fences protecting red camp
+        for (let i = 0; i < 6; i++) {
+            placeProp('prop-fence', redCampX - 250 + (i * 40), redCampY - 100 + (Math.random() * 10), 1.5);
+        }
+
+        // 3. Build the Blue Tribe Camp (Bottom Right)
+        const blueCampX = (this.WORLD_WIDTH / 3) * 2 + 50;
+        const blueCampY = this.WORLD_HEIGHT / 2 + 400;
+        placeProp('prop-tent', blueCampX, blueCampY, 2.0);
+        placeProp('prop-tent2', blueCampX - 120, blueCampY + 50, 2.0);
+        placeProp('prop-tent', blueCampX + 100, blueCampY + 60, 2.0);
+        placeProp('prop-fire', blueCampX - 20, blueCampY + 100, 1.5);
+        placeProp('prop-log', blueCampX + 30, blueCampY + 120, 2.0);
+
+        for (let i = 0; i < 5; i++) {
+            placeProp('prop-fence', blueCampX + 150 + (i * 40), blueCampY - 50, 1.5);
+        }
+
+        // 4. Fill edges with dense forests
+        for (let i = 0; i < 80; i++) {
+            // Top border forest
+            placeProp('prop-tree', Math.random() * this.WORLD_WIDTH, Math.random() * 300, 2.5 + Math.random());
+            placeProp('prop-bush', Math.random() * this.WORLD_WIDTH, Math.random() * 300, 1.5 + Math.random());
+            // Bottom border forest
+            placeProp('prop-tree', Math.random() * this.WORLD_WIDTH, this.WORLD_HEIGHT - Math.random() * 300, 2.5 + Math.random());
+            placeProp('prop-bush', Math.random() * this.WORLD_WIDTH, this.WORLD_HEIGHT - Math.random() * 300, 1.5 + Math.random());
+        }
+
+        // Random bushes & trees safely scattered in empty fields
+        for (let i = 0; i < 40; i++) {
+            placeProp('prop-tree', Math.random() * this.WORLD_WIDTH, 400 + Math.random() * (this.WORLD_HEIGHT - 800), 2.5);
+            placeProp('prop-bush', Math.random() * this.WORLD_WIDTH, 400 + Math.random() * (this.WORLD_HEIGHT - 800), 1.5);
+        }
+
+        // World Border
+        const border = this.scene.add.graphics();
+        border.lineStyle(4, 0x3b82f6, 0.8);
+        border.strokeRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+
+        // Animations
+        this.createAnimations();
+
+        // Groups for pooling
+        this.agentSprites = new Map();
+        this.monsterSprites = new Map();
+        this.foodSprites = [];
+        this.particleSprites = [];
+
+        // Track last positions for flipping
+        this.agentLastX = new Map();
+        this.monsterLastX = new Map();
+
+        // (Camera and layers have been moved to the top of create)
 
         // Selection ring
         this.selectionRing = this.scene.add.graphics();
@@ -72,41 +257,62 @@ export class SimulationEngine {
         window.addEventListener('resize', () => this.resize());
     }
 
+    createAnimations() {
+        const safeCreate = (key, frameRate, repeat) => {
+            if (!this.scene.textures.exists(key)) return;
+            if (this.scene.anims.exists(key)) return;
+            this.scene.anims.create({
+                key,
+                frames: this.scene.anims.generateFrameNumbers(key),
+                frameRate,
+                repeat: repeat ? -1 : 0
+            });
+        };
+
+        // Male animations (all 5 states available)
+        ['red', 'blue'].forEach(t => {
+            ['idle', 'walk', 'attack', 'hurt', 'dead'].forEach(a => {
+                safeCreate(`male-${t}-${a}`, 10, a !== 'dead' && a !== 'hurt' && a !== 'attack');
+            });
+        });
+
+        // Female animations now have all 5 states available
+        ['red', 'blue'].forEach(t => {
+            ['idle', 'walk', 'attack', 'hurt', 'dead'].forEach(a => {
+                safeCreate(`female-${t}-${a}`, 10, a !== 'dead' && a !== 'hurt' && a !== 'attack');
+            });
+        });
+
+        // Monster animations
+        [1, 2].forEach(num => {
+            ['idle', 'walk', 'attack', 'hurt', 'dead'].forEach(a => {
+                safeCreate(`monster-${num}-${a}`, 8, a !== 'dead');
+            });
+        });
+    }
+
     generateTextures() {
-        // Red Male (Square)
         let graphics = this.scene.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0xef4444);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.generateTexture('male-red', 32, 32);
 
-        // Blue Male (Square)
+        // Terrain Background Texture - Incredibly clean 2-tone classic checkerboard grass tile
         graphics.clear();
-        graphics.fillStyle(0x3b82f6);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.generateTexture('male-blue', 32, 32);
+        const color1 = 0x567d46; // Muted forest green
+        const color2 = 0x517742; // Slightly darker forest green
 
-        // Red Female (Triangle)
-        graphics.clear();
-        graphics.fillStyle(0xef4444);
-        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
-        graphics.generateTexture('female-red', 32, 32);
+        const size = 64;
+        const half = size / 2;
 
-        // Blue Female (Triangle)
-        graphics.clear();
-        graphics.fillStyle(0x3b82f6);
-        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
-        graphics.generateTexture('female-blue', 32, 32);
+        // Draw top-left and bottom-right
+        graphics.fillStyle(color1);
+        graphics.fillRect(0, 0, half, half);
+        graphics.fillRect(half, half, half, half);
 
-        graphics.clear();
-        graphics.fillStyle(0x9333ea);
-        graphics.fillTriangle(16, 0, 32, 32, 0, 32);
-        graphics.generateTexture('berserk-tri', 32, 32);
+        // Draw top-right and bottom-left
+        graphics.fillStyle(color2);
+        graphics.fillRect(half, 0, half, half);
+        graphics.fillRect(0, half, half, half);
 
-        // Monster
-        graphics.clear();
-        graphics.fillStyle(0xffce00);
-        graphics.fillCircle(16, 16, 16);
-        graphics.generateTexture('monster-base', 32, 32);
+        graphics.generateTexture('terrain', size, size);
 
         // Food
         graphics.clear();
@@ -123,9 +329,12 @@ export class SimulationEngine {
 
     setupCameraControls() {
         this.scene.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
-            const zoomSpeed = 0.001;
-            const newZoom = this.camera.zoom - deltaY * zoomSpeed;
-            this.camera.zoom = Phaser.Math.Clamp(newZoom, 0.2, 5);
+            const currentMinZoom = Math.max(window.innerWidth / this.WORLD_WIDTH, window.innerHeight / this.WORLD_HEIGHT);
+            const zoomSpeed = 0.0015;
+            // Clamp deltaY to limit trackpad hyperscrolling
+            const clampedDelta = Phaser.Math.Clamp(deltaY, -100, 100);
+            const newZoom = this.camera.zoom - clampedDelta * zoomSpeed;
+            this.camera.zoom = Phaser.Math.Clamp(newZoom, currentMinZoom, 5);
         });
 
         this.scene.input.on('pointermove', (pointer) => {
@@ -378,8 +587,8 @@ export class SimulationEngine {
 
         this.worker.postMessage({
             type: 'INIT',
-            width: window.innerWidth * 2, // Larger world than viewport
-            height: window.innerHeight * 2
+            width: this.WORLD_WIDTH,
+            height: this.WORLD_HEIGHT
         });
 
         this.addClass('settings-modal', 'hidden');
@@ -392,7 +601,7 @@ export class SimulationEngine {
         });
 
         // Center camera initially
-        if (this.camera) this.camera.centerOn(window.innerWidth, window.innerHeight);
+        if (this.camera) this.camera.centerOn(this.WORLD_WIDTH / 2, this.WORLD_HEIGHT / 2);
     }
 
     resize() {
@@ -416,9 +625,9 @@ export class SimulationEngine {
             this.agentSprites.forEach(s => s.destroy());
             this.agentSprites.clear();
         }
-        if (this.monsterGraphics) {
-            this.monsterGraphics.forEach(s => s.destroy());
-            this.monsterGraphics.clear();
+        if (this.monsterSprites) {
+            this.monsterSprites.forEach(s => { if (s && s.destroy) s.destroy(); });
+            this.monsterSprites.clear();
         }
         if (this.foodSprites) {
             this.foodSprites.forEach(s => s && s.destroy ? s.destroy() : null);
@@ -430,7 +639,7 @@ export class SimulationEngine {
         }
     }
 
-    update() {
+    update(scene) {
         if (!this.isPaused && this.renderData) {
             const data = this.renderData;
             this.renderData = null;
@@ -472,7 +681,7 @@ export class SimulationEngine {
             const s = aBuffer[i + 3];
             const isFemale = aBuffer[i + 4] === 1;
             const tInt = aBuffer[i + 5];
-            // skip i+6 (padding)
+            const state = aBuffer[i + 6];
             const hungerRatio = aBuffer[i + 7];
             const wearinessRatio = aBuffer[i + 8];
             const isBerserk = aBuffer[i + 9] === 1;
@@ -481,95 +690,133 @@ export class SimulationEngine {
 
             let sprite = this.agentSprites.get(id);
             if (!sprite) {
-                let texture = 'male-red';
-                if (isFemale) texture = tInt === 0 ? 'female-red' : 'female-blue';
-                else texture = tInt === 0 ? 'male-red' : 'male-blue';
-
-                sprite = this.scene.add.sprite(x, y, texture);
+                sprite = this.scene.add.sprite(x, y, 'male-red-idle');
                 this.agentLayer.add(sprite);
                 this.agentSprites.set(id, sprite);
             }
 
-            // Update texture based on state
-            let targetTexture = '';
-            if (isBerserk) targetTexture = isFemale ? 'berserk-tri' : 'berserk-sq';
-            else {
-                if (isFemale) targetTexture = tInt === 0 ? 'female-red' : 'female-blue';
-                else targetTexture = tInt === 0 ? 'male-red' : 'male-blue';
+            // Determine Animation Key
+            const genderStr = isFemale ? 'female' : 'male';
+            const tribeStr = tInt === 0 ? 'red' : 'blue';
+            let actionStr = 'idle';
+            if (state === ANIMATION_STATE.WALK) actionStr = 'walk';
+            else if (state === ANIMATION_STATE.ATTACK) actionStr = 'attack';
+            else if (state === ANIMATION_STATE.HURT) actionStr = 'hurt';
+            else if (state === ANIMATION_STATE.DEAD) actionStr = 'dead';
+
+            // For females, fall back to 'idle' if the action animation doesn't exist
+            let resolvedAction = actionStr;
+            if (isFemale && !this.scene.anims.exists(`${genderStr}-${tribeStr}-${resolvedAction}`)) {
+                resolvedAction = 'idle';
+            }
+            const animKey = `${genderStr}-${tribeStr}-${resolvedAction}`;
+            if (this.scene.anims.exists(animKey) && sprite.anims.currentAnim?.key !== animKey) {
+                sprite.play(animKey, true);
             }
 
-            if (sprite.texture.key !== targetTexture) sprite.setTexture(targetTexture);
+            // Direction Flipping - prevent violent jittering during combat
+            if (state !== ANIMATION_STATE.ATTACK && state !== ANIMATION_STATE.HURT) {
+                const lastX = this.agentLastX.get(id) || x;
+                if (x < lastX - 0.5) sprite.setFlipX(true);
+                else if (x > lastX + 0.5) sprite.setFlipX(false);
+                this.agentLastX.set(id, x);
+            }
 
             sprite.setPosition(x, y);
-            sprite.setDisplaySize(s, s);
 
-            // Glow Effects
+            // Adjust scale to fit the BG tiles mathematically
+            // Adjust scale to fit the BG tiles (Premium sprites have heavy padding, so need a harsh multiplier!)
+            const scale = (s * 8.5) / 128; 
+            sprite.setScale(scale);
+
+            // Berserk Effects
             if (isBerserk) {
-                // Phaser 3.60: Use preFX and manage specific effects manually or check for active flags
-                // To avoid repeated 'find' calls (which don't exist in that API), we use a flag on the sprite
                 if (sprite.lastFx !== 'berserk') {
-                    sprite.preFX.clear();
-                    sprite.preFX.addGlow(0xa855f7, 4, 1);
                     sprite.lastFx = 'berserk';
+                    sprite.setTint(0xff66ff);
                 }
-                const pulse = 0.5 + Math.sin(Date.now() / 150) * 0.5;
-                sprite.setAlpha(0.8 + pulse * 0.2);
             } else {
                 if (sprite.lastFx) {
-                    sprite.preFX.clear();
                     sprite.lastFx = null;
+                    sprite.clearTint();
                 }
-                sprite.setAlpha(1);
             }
 
-            // Selection ring
+            const visualHalfHeight = (128 * scale) / 2;
+
+            // Selection ring - Heavily expanded to wrap around the visual body (considering padding)
             if (this.selectedAgentId === id) {
                 const pulse = 1 + Math.sin(Date.now() / 200) * 0.2;
-                this.selectionRing.lineStyle(2, 0xfbbf24, 0.8 * pulse);
-                this.selectionRing.strokeCircle(x, y, s / 2 + 10 * pulse);
+                this.selectionRing.lineStyle(4, 0xfbbf24, 0.9 * pulse);
+                // Draw circle around the feet/character
+                this.selectionRing.strokeCircle(x, y + visualHalfHeight - 30, (s * 4.5) + (5 * pulse));
             }
 
-            // Indicators (Draw on UI Layer for simplicity, or use specific GameObjects)
+            // Indicators
             if (CONFIG.ENABLE_HUNGER) {
                 const r = Math.floor(255 * (1 - hungerRatio));
                 const g = Math.floor(255 * hungerRatio);
                 const color = (r << 16) | (g << 8);
-                this.uiLayer.lineStyle(2, color, 0.8);
-                this.uiLayer.beginPath();
-                this.uiLayer.arc(x, y, s / 2 + 4, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + (360 * hungerRatio)), false);
-                this.uiLayer.strokePath();
+
+                const barWidth = 60; 
+                const barHeight = 8;
+                const barX = x - barWidth / 2;
+                const barY = y + visualHalfHeight + 10; // Placed clearly below sprite box
+
+                this.uiLayer.fillStyle(0x000000, 0.6);
+                this.uiLayer.fillRect(barX, barY, barWidth, barHeight);
+                this.uiLayer.fillStyle(color, 0.8);
+                this.uiLayer.fillRect(barX, barY, barWidth * hungerRatio, barHeight);
             }
 
-            if (CONFIG.ENABLE_COMBAT_WEARINESS && wearinessRatio > 0.2) {
-                this.uiLayer.lineStyle(2, 0xfb923c, 0.3 + wearinessRatio * 0.7);
-                this.uiLayer.beginPath();
-                this.uiLayer.arc(x, y, s / 2 + 7, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + (360 * wearinessRatio)), false);
-                this.uiLayer.strokePath();
-            }
+            // Weariness
+            if (CONFIG.ENABLE_COMBAT_WEARINESS && wearinessRatio > 0.1) {
+                const barWidth = 60;
+                const barHeight = 8;
+                const barX = x - barWidth / 2;
+                const barY = y + visualHalfHeight + 20;
 
-            if (CONFIG.ENABLE_SHOW_AWARENESS) {
-                this.uiLayer.fillStyle(0xffffff, 0.015);
-                this.uiLayer.fillCircle(x, y, CONFIG.AWARENESS_RADIUS);
-            }
-
-            if (CONFIG.ENABLE_SHOW_INTERACTION) {
-                this.uiLayer.lineStyle(1.5, 0xffffff, 0.06);
-                this.uiLayer.strokeCircle(x, y, CONFIG.INTERACTION_RADIUS);
+                this.uiLayer.fillStyle(0x000000, 0.6);
+                this.uiLayer.fillRect(barX, barY, barWidth, barHeight);
+                this.uiLayer.fillStyle(0xfb923c, 0.8);
+                this.uiLayer.fillRect(barX, barY, barWidth * wearinessRatio, barHeight);
             }
         }
 
-        // Cleanup dead agent sprites
+        // Cleanup dead agents (play death animation if available)
         for (const [id, sprite] of this.agentSprites) {
             if (!activeIds.has(id)) {
+                if (sprite.getData('deadPlaying')) {
+                    if (sprite.anims.currentFrame && sprite.anims.currentFrame.isLast) {
+                        sprite.destroy();
+                        this.agentSprites.delete(id);
+                        this.agentLastX.delete(id);
+                    }
+                    continue;
+                }
+                const animKey = sprite.anims.currentAnim?.key;
+                if (animKey) {
+                    const parts = animKey.split('-');
+                    if (parts.length >= 2) {
+                        const genderStr = parts[0];
+                        const tribeStr = parts[1];
+                        const deadKey = `${genderStr}-${tribeStr}-dead`;
+                        if (this.scene.anims.exists(deadKey)) {
+                            sprite.play(deadKey, true);
+                            sprite.setData('deadPlaying', true);
+                            continue;
+                        }
+                    }
+                }
                 sprite.destroy();
                 this.agentSprites.delete(id);
+                this.agentLastX.delete(id);
             }
         }
 
         // --- FOOD ---
         const fBuffer = new Float32Array(data.foodBuffer);
         const foodCount = fBuffer.length / 2;
-
         while (this.foodSprites.length < foodCount) {
             const s = this.scene.add.sprite(0, 0, 'food');
             this.foodLayer.add(s);
@@ -578,20 +825,99 @@ export class SimulationEngine {
         while (this.foodSprites.length > foodCount) {
             this.foodSprites.pop().destroy();
         }
-
         for (let i = 0; i < foodCount; i++) {
             this.foodSprites[i].setPosition(fBuffer[i * 2], fBuffer[i * 2 + 1]);
+            this.foodSprites[i].setScale(6.0); // Make food visible!
         }
 
         // --- MONSTERS ---
         const mBuffer = new Float32Array(data.monsterBuffer);
         const activeMonsterIds = new Set();
-        // Since monsterBuffer doesn't have IDs in the original pack, we'll use index-based mapping or adjust worker later.
-        // For now, let's just use index-based pooling if no IDs are present.
-        // Actually, looking at worker.js: monsterBuffer pack is mx, my, mr, hpRatio, hungerRatio. No ID.
-        // Let's rely on count for now.
-        const monsterCount = mBuffer.length / 5;
-        this.updateMonsterPool(monsterCount, mBuffer);
+        for (let i = 0; i < mBuffer.length; i += 7) {
+            const id = mBuffer[i];
+            const mx = mBuffer[i + 1];
+            const my = mBuffer[i + 2];
+            const mr = mBuffer[i + 3];
+            const hp = mBuffer[i + 4];
+            const hunger = mBuffer[i + 5];
+            const mState = mBuffer[i + 6];
+
+            activeMonsterIds.add(id);
+
+            let mSprite = this.monsterSprites.get(id);
+            if (!mSprite) {
+                const type = (id % 2) + 1;
+                mSprite = this.scene.add.sprite(mx, my, `monster-${type}-idle`);
+                this.monsterLayer.add(mSprite);
+                this.monsterSprites.set(id, mSprite);
+            }
+
+            const type = (id % 2) + 1;
+            let mAction = 'idle';
+            if (mState === ANIMATION_STATE.WALK) mAction = 'walk';
+            else if (mState === ANIMATION_STATE.ATTACK) mAction = 'attack';
+            else if (mState === ANIMATION_STATE.HURT) mAction = 'hurt';
+            else if (mState === ANIMATION_STATE.DEAD) mAction = 'dead';
+
+            const mAnimKey = `monster-${type}-${mAction}`;
+            if (mSprite.anims.currentAnim?.key !== mAnimKey) {
+                mSprite.play(mAnimKey, true);
+            }
+
+            // Direction Flipping - prevent jittering
+            if (mState !== ANIMATION_STATE.ATTACK && mState !== ANIMATION_STATE.HURT) {
+                const lastMX = this.monsterLastX.get(id) || mx;
+                if (mx < lastMX - 0.5) mSprite.setFlipX(true);
+                else if (mx > lastMX + 0.5) mSprite.setFlipX(false);
+                this.monsterLastX.set(id, mx);
+            }
+
+            const mScale = (mr * 7.0) / 128; // Restored boss scale to tower over the heroes
+            const mVisualHalfHeight = (128 * mScale) / 2;
+            mSprite.setPosition(mx, my);
+            mSprite.setScale(mScale);
+
+            // HP Bar - Shifted further down
+            if (hp < 1.0) {
+                const barWidth = 80; 
+                const barHeight = 10;
+                const barY = my + mVisualHalfHeight + 10; 
+                this.uiLayer.fillStyle(0xff0000, 0.6);
+                this.uiLayer.fillRect(mx - barWidth / 2, barY, barWidth, barHeight);
+                this.uiLayer.fillStyle(0x10b981, 1);
+                this.uiLayer.fillRect(mx - barWidth / 2, barY, barWidth * hp, barHeight);
+            }
+        }
+
+        // Cleanup dead monsters
+        for (const [id, sprite] of this.monsterSprites) {
+            if (!activeMonsterIds.has(id)) {
+                if (sprite.getData('deadPlaying')) {
+                    if (sprite.anims.currentFrame && sprite.anims.currentFrame.isLast) {
+                        sprite.destroy();
+                        this.monsterSprites.delete(id);
+                        this.monsterLastX.delete(id);
+                    }
+                    continue;
+                }
+                const animKey = sprite.anims.currentAnim?.key;
+                if (animKey) {
+                    const parts = animKey.split('-');
+                    if (parts.length >= 2) {
+                        const monsterType = parts[1]; // e.g. "1" or "2"
+                        const deadKey = `monster-${monsterType}-dead`;
+                        if (this.scene.anims.exists(deadKey)) {
+                            sprite.play(deadKey, true);
+                            sprite.setData('deadPlaying', true);
+                            continue;
+                        }
+                    }
+                }
+                sprite.destroy();
+                this.monsterSprites.delete(id);
+                this.monsterLastX.delete(id);
+            }
+        }
 
         // --- PARTICLES ---
         const pBuffer = new Float32Array(data.particleBuffer);
@@ -599,78 +925,6 @@ export class SimulationEngine {
         this.updateParticlePool(pCount, pBuffer);
     }
 
-    updateMonsterPool(count, buffer) {
-        const ids = Array.from(this.monsterGraphics.keys());
-
-        // Ensure we have enough graphics objects
-        while (this.monsterGraphics.size < count) {
-            const id = `m-${this.monsterGraphics.size}`;
-            const g = this.scene.add.graphics();
-            this.monsterLayer.add(g);
-            this.monsterGraphics.set(id, g);
-            // Monsters always glow amber
-            if (g.preFX) {
-                g.preFX.addGlow(0xff7400, 4, 1);
-            }
-        }
-
-        const currentIds = Array.from(this.monsterGraphics.keys());
-
-        for (let i = 0; i < count; i++) {
-            const mg = this.monsterGraphics.get(currentIds[i]);
-            mg.clear();
-            mg.setVisible(true);
-
-            const mx = buffer[i * 5];
-            const y = buffer[i * 5 + 1];
-            const r = buffer[i * 5 + 2];
-            const hp = buffer[i * 5 + 3];
-            const hunger = buffer[i * 5 + 4];
-
-            // Wobbly Blob Shape
-            mg.fillStyle(0xffce00, 1);
-            mg.beginPath();
-            const points = 16;
-            for (let j = 0; j <= points; j++) {
-                const angle = (j / points) * Math.PI * 2;
-                // Wobble factors
-                const offset = Math.sin(angle * 5 + (Date.now() / 200)) * (r * 0.15) +
-                    Math.cos(angle * 4 + mx / 100) * (r * 0.2);
-                const rad = r + offset;
-                const px = mx + Math.cos(angle) * rad;
-                const py = y + Math.sin(angle) * rad;
-                if (j === 0) mg.moveTo(px, py);
-                else mg.lineTo(px, py);
-            }
-            mg.closePath();
-            mg.fill();
-
-            // HP Bar (Draw above)
-            if (hp < 1.0) {
-                const barWidth = r * 2.2;
-                mg.fillStyle(0xff0000, 0.6);
-                mg.fillRect(mx - barWidth / 2, y - r * 1.45 - 12, barWidth, 5);
-                mg.fillStyle(0x10b981, 1);
-                mg.fillRect(mx - barWidth / 2, y - r * 1.45 - 12, barWidth * hp, 5);
-            }
-
-            // Monster Hunger Arc
-            if (CONFIG.ENABLE_HUNGER && hunger < 1.0) {
-                const rgbR = Math.floor(255 * (1 - hunger));
-                const rgbG = Math.floor(255 * hunger);
-                const color = (rgbR << 16) | (rgbG << 8);
-                mg.lineStyle(4, color, 0.8);
-                mg.beginPath();
-                mg.arc(mx, y, r * 1.45, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * Math.max(0, Math.min(1, hunger))), false);
-                mg.strokePath();
-            }
-        }
-
-        // Hide unused monsters
-        for (let i = count; i < currentIds.length; i++) {
-            this.monsterGraphics.get(currentIds[i]).setVisible(false);
-        }
-    }
 
     updateParticlePool(count, buffer) {
         while (this.particleSprites.length < count) {

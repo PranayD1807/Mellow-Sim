@@ -1,6 +1,6 @@
 import { Agent } from './Agent.js?v=123456';
 import { Particle } from './Particle.js?v=123456';
-import { CONFIG, PERSONALITY } from './config.js?v=123456';
+import { CONFIG, PERSONALITY, ANIMATION_STATE } from './config.js?v=123456';
 import { rand, randInt, distance, clamp } from './utils.js?v=123456';
 import { Monster } from './Monster.js?v=123456';
 
@@ -154,6 +154,12 @@ export class InteractionManager {
 
         // Fight happens
         this.stats.kills++;
+
+        // Trigger Animations
+        a.state = ANIMATION_STATE.ATTACK;
+        a.stateTimer = 90; // Slower, heavier engagements
+        b.state = ANIMATION_STATE.HURT;
+        b.stateTimer = 90;
 
         // Weariness reduces combat effectiveness (up to -50% at max weariness)
         const wearinessPenaltyA = CONFIG.ENABLE_COMBAT_WEARINESS ? (1 - (a.weariness / CONFIG.WEARINESS_MAX) * 0.5) : 1;
@@ -668,6 +674,12 @@ export class InteractionManager {
                     damage += damage * (agent.intelligence / 100);
                     monster.hp -= damage;
 
+                    // Trigger Animations
+                    agent.state = ANIMATION_STATE.ATTACK;
+                    agent.stateTimer = 90;
+                    monster.state = ANIMATION_STATE.HURT;
+                    monster.stateTimer = 90;
+
                     // Survival Check Check! Stronger and Smarter agents can survive a blow, but exhaustion and swarms are deadly!
                     const baseSurvival = (agent.strength / 100) * 0.6 + (agent.intelligence / 100) * 0.3;
 
@@ -689,6 +701,12 @@ export class InteractionManager {
                         // Agent survives the clash!
                         this.pushApart(agent, monster, 5.0); // Massive knockback
                         agent.addKillWeariness(worldTick);   // Fighting a monster is exhausting!
+
+                        // Monster strikes back!
+                        monster.state = ANIMATION_STATE.ATTACK;
+                        monster.stateTimer = 90;
+                        agent.state = ANIMATION_STATE.HURT;
+                        agent.stateTimer = 90;
 
                         // Update stats
                         this.stats.monster_fights = (this.stats.monster_fights || 0) + 1;

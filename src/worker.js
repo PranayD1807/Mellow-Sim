@@ -76,7 +76,7 @@ function reset(w, h) {
         idMap.set(a.intId, a);
         agents.push(a);
     }
-    
+
     if (CONFIG.ENABLE_MONSTERS) {
         for (let i = 0; i < (CONFIG.INITIAL_MONSTERS || 0); i++) {
             let rx = rand(margin, canvasWidth - margin);
@@ -165,7 +165,7 @@ function runLoop() {
         agents[i].isDesperate = (tribeCounts[agents[i].tribe] < 12);
         agents[i].seeksScarceGender = (criticallyScarceGender && agents[i].gender !== criticallyScarceGender);
         agents[i].isScarceGender = (agents[i].gender === criticallyScarceGender);
-        
+
         // Pass map dimensions so agents can navigate to Capitals
         agents[i].mapWidth = canvasWidth;
         agents[i].mapHeight = canvasHeight;
@@ -262,7 +262,7 @@ function runLoop() {
         else if (a.tribe === 'Blue') { tribeBlue++; tInt = 1; }
         agentBuffer[offset++] = tInt;
 
-        agentBuffer[offset++] = 0; // Padding (previously infection)
+        agentBuffer[offset++] = a.state; // index 6: animation state
         agentBuffer[offset++] = CONFIG.ENABLE_HUNGER ? a.hunger / CONFIG.MAX_HUNGER : 1; // hunger ratio
         agentBuffer[offset++] = CONFIG.ENABLE_COMBAT_WEARINESS ? a.weariness / CONFIG.WEARINESS_MAX : 0; // weariness ratio
         agentBuffer[offset++] = a.isBerserk ? 1 : 0; // 10th float: Manic flag
@@ -274,7 +274,7 @@ function runLoop() {
         totalStr += a.strength;
         totalInt += a.intelligence;
         totalSpd += a.speed;
-        
+
         // Update All-Time Heroes in InteractionManager
         if (a.offspringCount > interactionManager.allTimeHeroes.prolific.val) {
             interactionManager.allTimeHeroes.prolific = { name: a.name, val: a.offspringCount };
@@ -315,14 +315,16 @@ function runLoop() {
         foodBuffer[fOffset++] = foods[i].y;
     }
 
-    const monsterBuffer = new Float32Array(monsters.length * 5);
+    const monsterBuffer = new Float32Array(monsters.length * 7);
     let mOffset = 0;
     for (let i = 0; i < monsters.length; i++) {
+        monsterBuffer[mOffset++] = monsters[i].intId; // New: ID
         monsterBuffer[mOffset++] = monsters[i].x;
         monsterBuffer[mOffset++] = monsters[i].y;
         monsterBuffer[mOffset++] = monsters[i].radius;
         monsterBuffer[mOffset++] = monsters[i].hp / monsters[i].maxHp; // hp ratio for visual indicator
         monsterBuffer[mOffset++] = CONFIG.ENABLE_HUNGER ? (monsters[i].hunger / CONFIG.MAX_HUNGER) : 1; // hunger ratio
+        monsterBuffer[mOffset++] = monsters[i].state; // New: state
     }
 
     let selectedAgentData = null;

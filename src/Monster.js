@@ -1,5 +1,5 @@
 import { Entity } from './Entity.js?v=123456';
-import { CONFIG } from './config.js?v=123456';
+import { CONFIG, ANIMATION_STATE } from './config.js?v=123456';
 import { rand, randInt, generateId } from './utils.js?v=123456';
 
 export class Monster extends Entity {
@@ -16,6 +16,10 @@ export class Monster extends Entity {
         this.hp = this.maxHp;
 
         this.radius = CONFIG.MONSTER_RADIUS;
+
+        // Animation State
+        this.state = ANIMATION_STATE.IDLE;
+        this.stateTimer = 0;
 
         // Initial random vector
         const angle = rand(0, Math.PI * 2);
@@ -127,8 +131,14 @@ export class Monster extends Entity {
     }
 
     update(width, height, worldTick, foodsArray) {
-        this.x += this.vx;
-        this.y += this.vy;
+        // Slow down massively so they stay visually engaged with target
+        let speedMult = 1.0;
+        if (this.stateTimer > 0 && (this.state === ANIMATION_STATE.ATTACK || this.state === ANIMATION_STATE.HURT)) {
+            speedMult = 0.1;
+        }
+
+        this.x += this.vx * speedMult;
+        this.y += this.vy * speedMult;
 
         // Bounce off edges with absolute velocity assignment to prevent wall vibration stall
         if (this.x - this.radius <= 0) {
@@ -145,6 +155,20 @@ export class Monster extends Entity {
         } else if (this.y + this.radius >= height) {
             this.vy = -Math.abs(this.vy) - 0.1;
             this.y = height - this.radius;
+        }
+
+        // Update Animation State
+        if (this.markedForDeath) {
+            this.state = ANIMATION_STATE.DEAD;
+        } else if (this.stateTimer > 0) {
+            this.stateTimer--;
+        } else {
+            const speed = Math.hypot(this.vx, this.vy);
+            if (speed > 0.1) {
+                this.state = ANIMATION_STATE.WALK;
+            } else {
+                this.state = ANIMATION_STATE.IDLE;
+            }
         }
     }
 }
